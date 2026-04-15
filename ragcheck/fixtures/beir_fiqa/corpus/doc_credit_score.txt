@@ -1,0 +1,7 @@
+A credit score is a three-digit number that lenders use to assess
+creditworthiness. FICO scores range from 300 to 850; scores above 740 are
+generally considered excellent. Payment history is the largest factor
+(about 35% of the score), followed by credit utilisation (30%), length of
+credit history (15%), credit mix (10%), and new credit (10%). Paying down
+balances and keeping old accounts open are two of the fastest ways to
+improve a score.

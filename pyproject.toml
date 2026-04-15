@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ragcheck"
+version = "1.0.0"
+description = "Offline RAG retrieval quality harness. Recall@k, nDCG, MRR, chunking diagnostics, regression diffs. No LLM-as-judge required. CI-friendly."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "JSLEEKR", email = "93jslee@gmail.com" }]
+keywords = ["rag", "retrieval", "evaluation", "ir", "ndcg", "recall", "offline"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Testing",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+  "numpy>=1.23",
+  "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+sentence-transformers = ["sentence-transformers>=2.2"]
+openai = ["openai>=1.0"]
+dev = [
+  "pytest>=7.0",
+  "pytest-cov>=4.0",
+  "mypy>=1.5",
+  "ruff>=0.1",
+]
+
+[project.scripts]
+ragcheck = "ragcheck.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/JSLEEKR/ragcheck"
+Repository = "https://github.com/JSLEEKR/ragcheck"
+Issues = "https://github.com/JSLEEKR/ragcheck/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ragcheck*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+ragcheck = ["fixtures/**/*.json", "fixtures/**/*.txt", "fixtures/**/*.md", "templates/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-ra --strict-markers"
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true
+follow_imports = "silent"
+files = ["ragcheck"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
+ignore = ["E501", "B008"]
+
+[tool.coverage.run]
+branch = true
+source = ["ragcheck"]
+omit = ["ragcheck/cli.py", "ragcheck/__main__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]

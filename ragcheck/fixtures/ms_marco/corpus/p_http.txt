@@ -1,0 +1,6 @@
+HTTP is the Hypertext Transfer Protocol, the foundation of data communication
+for the World Wide Web. It is a stateless, text-based protocol using a
+request-response model. Common methods include GET, POST, PUT, DELETE, PATCH,
+and HEAD. Status codes indicate the outcome of a request: 2xx for success,
+3xx for redirects, 4xx for client errors, and 5xx for server errors. HTTP/2
+adds multiplexing and header compression; HTTP/3 runs over QUIC.

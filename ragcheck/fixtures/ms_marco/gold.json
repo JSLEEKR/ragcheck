@@ -1,0 +1,55 @@
+{
+  "source": "ms_marco_subset",
+  "synthetic": false,
+  "version": 1,
+  "questions": [
+    {
+      "query_id": "mm001",
+      "text": "Which organisation maintains Kubernetes today?",
+      "relevant_doc_ids": ["p_kubernetes"],
+      "relevance": {"p_kubernetes": 2.0}
+    },
+    {
+      "query_id": "mm002",
+      "text": "What Linux kernel features does Docker use for isolation?",
+      "relevant_doc_ids": ["p_docker"],
+      "relevance": {"p_docker": 2.0}
+    },
+    {
+      "query_id": "mm003",
+      "text": "Who created the Python programming language?",
+      "relevant_doc_ids": ["p_python"],
+      "relevance": {"p_python": 2.0}
+    },
+    {
+      "query_id": "mm004",
+      "text": "What HTTP status code range indicates server errors?",
+      "relevant_doc_ids": ["p_http"],
+      "relevance": {"p_http": 2.0}
+    },
+    {
+      "query_id": "mm005",
+      "text": "What is the difference between TCP and UDP?",
+      "relevant_doc_ids": ["p_tcp"],
+      "relevance": {"p_tcp": 2.0}
+    },
+    {
+      "query_id": "mm006",
+      "text": "Who created Git and when?",
+      "relevant_doc_ids": ["p_git"],
+      "relevance": {"p_git": 2.0}
+    },
+    {
+      "query_id": "mm007",
+      "text": "What does HTTP status 3xx mean?",
+      "relevant_doc_ids": ["p_http"],
+      "relevance": {"p_http": 1.0}
+    },
+    {
+      "query_id": "mm008",
+      "text": "What are Kubernetes pods?",
+      "relevant_doc_ids": ["p_kubernetes"],
+      "relevance": {"p_kubernetes": 2.0}
+    }
+  ]
+}

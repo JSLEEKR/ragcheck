@@ -1,0 +1,7 @@
+Exchange-traded funds (ETFs) are pooled investment vehicles that trade on
+stock exchanges like individual stocks. They typically track an index and
+offer lower expense ratios than traditional mutual funds. Passive ETFs like
+VOO track the S&P 500 index, while active ETFs attempt to outperform a
+benchmark. ETFs are generally more tax-efficient than mutual funds because
+of the in-kind creation and redemption mechanism, which limits capital gains
+distributions.

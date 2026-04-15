@@ -1,0 +1,43 @@
+{
+  "source": "needle_in_haystack",
+  "synthetic": false,
+  "version": 1,
+  "questions": [
+    {
+      "query_id": "n001",
+      "text": "What is the activation code ALPHA OMEGA for token 0?",
+      "relevant_doc_ids": ["needle_000"],
+      "relevance": {"needle_000": 2.0}
+    },
+    {
+      "query_id": "n002",
+      "text": "What activation code is hidden for token 1?",
+      "relevant_doc_ids": ["needle_001"],
+      "relevance": {"needle_001": 2.0}
+    },
+    {
+      "query_id": "n003",
+      "text": "What is the needle for token 2?",
+      "relevant_doc_ids": ["needle_002"],
+      "relevance": {"needle_002": 2.0}
+    },
+    {
+      "query_id": "n004",
+      "text": "What activation code corresponds to token 3?",
+      "relevant_doc_ids": ["needle_003"],
+      "relevance": {"needle_003": 2.0}
+    },
+    {
+      "query_id": "n005",
+      "text": "What is the buried NEEDLE for token 4?",
+      "relevant_doc_ids": ["needle_004"],
+      "relevance": {"needle_004": 2.0}
+    },
+    {
+      "query_id": "n006",
+      "text": "What is the hidden activation code for token 5?",
+      "relevant_doc_ids": ["needle_005"],
+      "relevance": {"needle_005": 2.0}
+    }
+  ]
+}

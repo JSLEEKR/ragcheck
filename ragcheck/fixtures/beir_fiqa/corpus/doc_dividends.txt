@@ -1,0 +1,7 @@
+Dividends are periodic payments that a corporation distributes to its
+shareholders out of earnings. Most US dividend-paying companies pay quarterly.
+Qualified dividends are taxed at the long-term capital gains rate, while
+ordinary dividends are taxed at the regular income tax rate. A company's
+dividend yield is the annual dividend divided by the current share price.
+Dividend reinvestment plans (DRIPs) let shareholders automatically buy more
+shares with their distributions.

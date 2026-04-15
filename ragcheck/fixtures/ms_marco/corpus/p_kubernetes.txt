@@ -1,0 +1,6 @@
+Kubernetes is an open-source container orchestration platform originally
+developed by Google and now maintained by the Cloud Native Computing
+Foundation. It automates deployment, scaling, and management of
+containerised applications. Core objects include pods, services, deployments,
+and stateful sets. Scheduling decisions are made by the kube-scheduler based
+on resource requests and node affinity rules.

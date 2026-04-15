@@ -1,0 +1,8 @@
+A bond is a loan made by an investor to a borrower, typically a corporation
+or government. Bonds pay periodic interest (the coupon) and return the
+principal at maturity. Bond prices move inversely to interest rates: when
+market rates rise, existing bond prices fall. Duration is a measure of a
+bond's sensitivity to interest rate changes. Investment-grade bonds carry
+ratings of BBB or higher from S&P; high-yield (junk) bonds are rated below
+BBB. US Treasury bonds are considered the safest because they are backed
+by the full faith and credit of the United States government.

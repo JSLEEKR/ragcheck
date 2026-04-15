@@ -1,0 +1,67 @@
+{
+  "source": "beir_fiqa_subset",
+  "synthetic": false,
+  "version": 1,
+  "questions": [
+    {
+      "query_id": "fq001",
+      "text": "What are interest rates and how do central banks use them?",
+      "relevant_doc_ids": ["doc_interest_rate"],
+      "relevance": {"doc_interest_rate": 2.0}
+    },
+    {
+      "query_id": "fq002",
+      "text": "How are qualified dividends taxed?",
+      "relevant_doc_ids": ["doc_dividends"],
+      "relevance": {"doc_dividends": 2.0}
+    },
+    {
+      "query_id": "fq003",
+      "text": "Why are ETFs tax-efficient compared to mutual funds?",
+      "relevant_doc_ids": ["doc_etf"],
+      "relevance": {"doc_etf": 2.0}
+    },
+    {
+      "query_id": "fq004",
+      "text": "What is the 2024 employee contribution limit for a 401k?",
+      "relevant_doc_ids": ["doc_401k"],
+      "relevance": {"doc_401k": 2.0}
+    },
+    {
+      "query_id": "fq005",
+      "text": "How does bond duration measure interest rate sensitivity?",
+      "relevant_doc_ids": ["doc_bond_basics"],
+      "relevance": {"doc_bond_basics": 2.0}
+    },
+    {
+      "query_id": "fq006",
+      "text": "What is the Consumer Price Index?",
+      "relevant_doc_ids": ["doc_inflation"],
+      "relevance": {"doc_inflation": 2.0}
+    },
+    {
+      "query_id": "fq007",
+      "text": "What factor has the biggest weight in a FICO credit score?",
+      "relevant_doc_ids": ["doc_credit_score"],
+      "relevance": {"doc_credit_score": 2.0}
+    },
+    {
+      "query_id": "fq008",
+      "text": "What is the difference between a call option and a put option?",
+      "relevant_doc_ids": ["doc_options"],
+      "relevance": {"doc_options": 2.0}
+    },
+    {
+      "query_id": "fq009",
+      "text": "What are dividend reinvestment plans?",
+      "relevant_doc_ids": ["doc_dividends"],
+      "relevance": {"doc_dividends": 1.0}
+    },
+    {
+      "query_id": "fq010",
+      "text": "Are high-yield bonds and junk bonds the same thing?",
+      "relevant_doc_ids": ["doc_bond_basics"],
+      "relevance": {"doc_bond_basics": 1.0}
+    }
+  ]
+}

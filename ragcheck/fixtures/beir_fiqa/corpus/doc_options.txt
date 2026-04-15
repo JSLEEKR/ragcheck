@@ -1,0 +1,8 @@
+An option is a contract that gives the buyer the right, but not the
+obligation, to buy or sell an underlying asset at a specified strike price
+before a given expiration date. Call options grant the right to buy; put
+options grant the right to sell. Option premium is determined by intrinsic
+value, time value, implied volatility, interest rates, and dividends. The
+Black-Scholes model is the standard mathematical framework for pricing
+European options. American options can be exercised at any time before
+expiry.

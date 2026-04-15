@@ -1,0 +1,6 @@
+Inflation measures the rate at which the general level of prices for goods
+and services rises, eroding purchasing power. The Consumer Price Index (CPI)
+is the most commonly cited US inflation measure. Core inflation excludes food
+and energy prices because they are volatile. Central banks typically target
+around 2% annual inflation. TIPS (Treasury Inflation-Protected Securities)
+are bonds whose principal adjusts with CPI to provide real-yield protection.

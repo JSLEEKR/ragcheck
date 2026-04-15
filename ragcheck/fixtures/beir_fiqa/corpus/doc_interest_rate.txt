@@ -1,0 +1,7 @@
+Interest rates determine the cost of borrowing money. Central banks adjust
+policy rates to influence inflation and employment. When rates rise, mortgage
+payments increase and savings accounts pay more. When rates fall, borrowing
+becomes cheaper and asset prices tend to rise. The federal funds rate is the
+benchmark in the United States; the ECB main refinancing operations rate is
+the benchmark in the Eurozone. Long-term Treasury yields reflect expectations
+of future short-term rates plus a term premium.

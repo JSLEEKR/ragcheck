@@ -1,0 +1,6 @@
+TCP is the Transmission Control Protocol, a connection-oriented transport
+layer protocol that provides reliable, ordered, and error-checked delivery
+between applications over an IP network. Features include a three-way
+handshake, flow control via sliding windows, congestion control, and
+automatic retransmission. UDP is the alternative transport protocol; it is
+connectionless, unordered, and optimised for latency rather than reliability.

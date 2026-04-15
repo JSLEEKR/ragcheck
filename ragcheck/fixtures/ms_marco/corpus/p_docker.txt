@@ -1,0 +1,6 @@
+Docker is a platform for developing, shipping, and running applications in
+containers. Containers package an application with its dependencies into a
+standard unit that runs identically on a developer laptop and production
+servers. Docker uses Linux kernel features like namespaces and cgroups for
+isolation. Dockerfiles declare how an image is built; images are stored in
+registries like Docker Hub, GCR, and ECR.
