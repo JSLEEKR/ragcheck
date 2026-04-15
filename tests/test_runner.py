@@ -199,3 +199,28 @@ class TestNumpyEmbedderPath:
         from ragcheck.runner import _build_embedder
         with pytest.raises(ValueError):
             _build_embedder("numpy", {})
+
+
+class TestPublicAPI:
+    """Regression (H1): README documents ``ragcheck.load_result_json`` and
+    ``ragcheck.dump_result_json`` as part of the programmatic API. They must
+    be importable from the top-level package."""
+
+    def test_load_result_json_exported(self):
+        import ragcheck
+        assert hasattr(ragcheck, "load_result_json")
+        assert ragcheck.load_result_json is load_result_json
+
+    def test_dump_result_json_exported(self):
+        import ragcheck
+        assert hasattr(ragcheck, "dump_result_json")
+        assert ragcheck.dump_result_json is dump_result_json
+
+    def test_load_roundtrip_via_public_api(self, tmp_path, tiny_corpus, tiny_gold):
+        import ragcheck
+        config = RunConfig(corpus_path=str(tiny_corpus), gold_path=str(tiny_gold))
+        result = run_evaluation(config=config)
+        p = tmp_path / "r.json"
+        ragcheck.dump_result_json(result, p)
+        loaded = ragcheck.load_result_json(p)
+        assert loaded["tool_version"]

@@ -1,6 +1,6 @@
 # ragcheck
 
-[![tests](https://img.shields.io/badge/tests-342%20passing-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck/actions)
+[![tests](https://img.shields.io/badge/tests-353%20passing-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck/actions)
 [![coverage](https://img.shields.io/badge/coverage-96%25-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck)
 [![python](https://img.shields.io/badge/python-3.9%2B-blue?style=for-the-badge)](https://python.org)
 [![license](https://img.shields.io/badge/license-MIT-lightgrey?style=for-the-badge)](LICENSE)
@@ -9,7 +9,7 @@
 [![offline](https://img.shields.io/badge/runtime-offline-green?style=for-the-badge)](#installation)
 [![bench](https://img.shields.io/badge/bench-%3C1s-brightgreen?style=for-the-badge)](#benchmark)
 
-> **342 tests. Offline retrieval-quality harness for RAG systems. No LLM-as-judge.**
+> **353 tests. Offline retrieval-quality harness for RAG systems. No LLM-as-judge.**
 >
 > `recall@k`, `precision@k`, `hit_rate@k`, `MRR`, `nDCG` (binary + graded),
 > `context_precision`, `context_recall`, plus chunking diagnostics and
@@ -82,7 +82,7 @@ ragcheck run \
 
 # 2. Change chunker, re-run
 ragcheck run --corpus ... --gold ... --out runs/candidate.json \
-  --chunker sliding-window --chunker-args '{"window_tokens": 120, "stride_tokens": 60}'
+  --chunker sliding-window --chunker-args '{"size": 120, "stride": 60}'
 
 # 3. Diff
 ragcheck diff runs/baseline.json runs/candidate.json --fail-on-degraded
@@ -113,7 +113,7 @@ ragcheck run \
   --corpus ./docs \
   --gold   ./eval/gold.json \
   --chunker semantic-boundary \
-  --chunker-args '{"max_chars": 1200, "overlap_chars": 100}' \
+  --chunker-args '{"max_chars": 1200}' \
   --embedder hash \
   --top-k 10 \
   --out runs/2026-04-16.json
@@ -426,7 +426,7 @@ All three ship in `ragcheck.fixtures`; `bench` runs all three.
 git clone https://github.com/JSLEEKR/ragcheck.git
 cd ragcheck
 pip install -e ".[dev,sentence-transformers,openai]"
-pytest           # 342 tests pass (doc-drift guard included)
+pytest           # 353 tests pass (doc-drift guard included)
 ruff check ragcheck/
 mypy ragcheck/
 python -m ragcheck bench

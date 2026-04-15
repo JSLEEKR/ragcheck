@@ -49,3 +49,6 @@ Thumbs.db
 /tmp/
 *.log
 scratch/
+
+# Eval cycle notes (not committed)
+.eval-notes-*.md

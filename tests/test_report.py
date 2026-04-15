@@ -109,6 +109,80 @@ class TestRenderHTML:
         assert "Per-query metrics" not in html
 
 
+class TestRegressionCycleA:
+    """Regression tests for bugs found in Phase 3 Eval Cycle A."""
+
+    def test_render_html_handles_none_per_query_metric(self):
+        """H3: per-query metric of None must not crash render_html.
+
+        The runner emits ``None`` for metrics that are undefined on a given
+        query (e.g. MRR when the query has zero relevants). The HTML
+        renderer must render that as ``null`` rather than raising
+        ``TypeError: float() argument must be ... not 'NoneType'``.
+        """
+        run = {
+            "config": {"label": "x"},
+            "summary": {},
+            "corpus_stats": {},
+            "diagnostics": {},
+            "per_query": [
+                {"query_id": "q1", "metrics": {"recall@5": None, "mrr": 0.5}},
+                {"query_id": "q2", "metrics": {"recall@5": 0.25, "mrr": None}},
+            ],
+        }
+        html = render_html(run)
+        assert "<td>null</td>" in html
+        assert "q1" in html and "q2" in html
+
+    def test_render_markdown_handles_none_per_query_metric(self):
+        """Mirror of H3 — Markdown path already handled None; lock it in."""
+        run = {
+            "config": {"label": "x"},
+            "summary": {},
+            "corpus_stats": {},
+            "diagnostics": {},
+            "per_query": [
+                {"query_id": "q1", "metrics": {"recall@5": None, "mrr": 0.5}},
+            ],
+        }
+        md = render_markdown(run)
+        # Columns are sorted alphabetically (mrr, recall@5).
+        assert "| q1 | 0.500000 | null |" in md
+
+    def test_markdown_normalises_windows_paths(self):
+        """M1: backslash paths must be rendered with forward slashes so
+        reports generated on Windows compare byte-for-byte with Linux."""
+        run = {
+            "config": {
+                "label": "x",
+                "corpus_path": "C:\\data\\corpus",
+                "gold_path": "C:\\data\\gold.json",
+            },
+            "summary": {},
+            "corpus_stats": {},
+            "diagnostics": {},
+            "per_query": [],
+        }
+        md = render_markdown(run)
+        assert "C:/data/corpus" in md
+        assert "C:\\data\\corpus" not in md
+
+    def test_html_normalises_windows_paths(self):
+        run = {
+            "config": {
+                "label": "x",
+                "corpus_path": "C:\\data\\corpus",
+            },
+            "summary": {},
+            "corpus_stats": {},
+            "diagnostics": {},
+            "per_query": [],
+        }
+        html = render_html(run)
+        assert "C:/data/corpus" in html
+        assert "C:\\data\\corpus" not in html
+
+
 class TestRenderDeterminism:
     def test_markdown_deterministic(self, sample_run):
         a = render_markdown(sample_run)

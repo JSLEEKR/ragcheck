@@ -39,7 +39,13 @@ from ragcheck.metrics import (
     recall_at_k,
 )
 from ragcheck.report import render_html, render_json, render_markdown
-from ragcheck.runner import RunConfig, RunResult, run_evaluation
+from ragcheck.runner import (
+    RunConfig,
+    RunResult,
+    dump_result_json,
+    load_result_json,
+    run_evaluation,
+)
 
 __all__ = [
     "__version__",
@@ -74,6 +80,8 @@ __all__ = [
     "RunConfig",
     "RunResult",
     "run_evaluation",
+    "dump_result_json",
+    "load_result_json",
     # diff
     "DiffResult",
     "diff_runs",

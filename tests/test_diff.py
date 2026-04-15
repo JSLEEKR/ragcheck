@@ -236,3 +236,34 @@ class TestDefaultThresholds:
         assert "precision" in DEFAULT_THRESHOLDS
         assert "mrr" in DEFAULT_THRESHOLDS
         assert "ndcg" in DEFAULT_THRESHOLDS
+
+
+class TestFloatBoundary:
+    """Regression (M2): exact-threshold drops must not flip sign purely
+    because of IEEE 754 imprecision. 0.80 - 0.78 evaluates to
+    -0.020000000000000018 in native float; the diff must classify that as
+    'flat' (equal to threshold), not 'degraded'.
+    """
+
+    def test_exact_threshold_drop_is_flat(self):
+        base = _run_payload({"recall@5": 0.80})
+        head = _run_payload({"recall@5": 0.78})
+        diff = diff_runs(base, head)
+        # 0.80 - 0.78 is exactly the default 0.02 threshold.
+        assert diff.exit_code == 0
+        assert "recall@5" in diff.flat
+        assert "recall@5" not in diff.degraded
+
+    def test_exact_threshold_improve_is_flat(self):
+        base = _run_payload({"recall@5": 0.78})
+        head = _run_payload({"recall@5": 0.80})
+        diff = diff_runs(base, head)
+        assert "recall@5" in diff.flat
+        assert "recall@5" not in diff.improved
+
+    def test_just_past_threshold_is_degraded(self):
+        base = _run_payload({"recall@5": 0.80})
+        head = _run_payload({"recall@5": 0.77})
+        diff = diff_runs(base, head)
+        assert diff.exit_code == 1
+        assert "recall@5" in diff.degraded

@@ -240,13 +240,50 @@ class TestRegistry:
             name = "null"
             def chunk(self, doc_id, text):
                 return []
-        register_chunker("null-test", Null)
+        # Use override=True so the test is idempotent across multiple
+        # pytest invocations within the same Python session.
+        register_chunker("null-test", Null, override=True)
         assert "null-test" in list_chunkers()
         assert get_chunker("null-test").name == "null"
 
     def test_register_empty_name_rejected(self):
         with pytest.raises(ValueError):
             register_chunker("", lambda: None)
+
+    def test_register_duplicate_rejected(self):
+        """Regression (H4): duplicate registration must raise, not silently
+        overwrite. The README documents this behaviour; it had silently
+        been broken."""
+        with pytest.raises(ValueError, match="already registered"):
+            register_chunker("fixed-token", FixedTokenChunker)
+
+    def test_register_duplicate_override_allowed(self):
+        """override=True is the explicit escape hatch for plugins that
+        really do want to replace a built-in."""
+        class Replacement:
+            name = "replaced"
+            def chunk(self, doc_id, text):
+                return []
+        register_chunker(
+            "dup-override-test", Replacement, override=False,
+        )
+        # A second registration with override=True replaces it.
+        register_chunker(
+            "dup-override-test", Replacement, override=True,
+        )
+        assert "dup-override-test" in list_chunkers()
+
+
+class TestSemanticBoundaryChunker:
+    def test_crlf_paragraph_break_recognised(self):
+        """Regression (L1): \\r\\n\\r\\n paragraph breaks must split into
+        two paragraphs even when the input was never normalised."""
+        c = SemanticBoundaryChunker(max_chars=1000)
+        text = "First paragraph here.\r\n\r\nSecond paragraph here."
+        chunks = c.chunk("d1", text)
+        assert len(chunks) == 2
+        assert "First paragraph" in chunks[0].text
+        assert "Second paragraph" in chunks[1].text
 
 
 class TestChunkDataclass:

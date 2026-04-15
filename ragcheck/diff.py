@@ -155,10 +155,16 @@ def diff_runs(
         abs_d = h - b
         rel_d = _rel_delta(b, h)
         thr = _threshold_for(m, th)
-        if abs_d < -thr:
+        # Round the delta to 6 decimals before comparing against the
+        # threshold so exact boundary cases (e.g. 0.80 - 0.78) don't fall on
+        # the "degraded" side purely because of IEEE float imprecision. The
+        # serialised abs_delta is already rounded to 6 decimals, so this also
+        # keeps the classification and the rendered number in sync.
+        abs_d_cmp = round(abs_d, 6)
+        if abs_d_cmp < -thr:
             status = "degraded"
             result.degraded.append(m)
-        elif abs_d > thr:
+        elif abs_d_cmp > thr:
             status = "improved"
             result.improved.append(m)
         else:

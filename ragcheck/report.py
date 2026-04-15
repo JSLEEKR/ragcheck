@@ -7,6 +7,25 @@ from typing import Any, List, Mapping
 from ragcheck.diagnostics import format_histogram_ascii
 
 
+def _normalise_path_like(value: Any) -> Any:
+    """Render filesystem-looking strings with forward slashes.
+
+    This keeps Markdown and HTML reports byte-identical across Linux and
+    Windows runners, even when the underlying corpus/gold paths were captured
+    with platform-native separators.
+    """
+    if isinstance(value, str) and "\\" in value:
+        return value.replace("\\", "/")
+    return value
+
+
+def _cell(value: Any) -> str:
+    """Render an arbitrary value as a report cell (None → ``null``)."""
+    if value is None:
+        return "null"
+    return str(_normalise_path_like(value))
+
+
 def render_json(data: Any, *, pretty: bool = True) -> str:
     """Render any JSON-serialisable payload (dict or list) as deterministic JSON text."""
     if pretty:
@@ -35,19 +54,19 @@ def render_markdown(run: Mapping[str, Any]) -> str:
     lines.append("")
     lines.append("| Field | Value |")
     lines.append("|---|---|")
-    lines.append(f"| Corpus | `{config.get('corpus_path', '')}` |")
-    lines.append(f"| Gold set | `{config.get('gold_path', '')}` |")
-    lines.append(f"| Chunker | `{config.get('chunker', '')}` |")
-    lines.append(f"| Embedder | `{config.get('embedder', '')}` |")
-    lines.append(f"| k values | `{config.get('k_values', [])}` |")
-    lines.append(f"| Seed | `{config.get('seed', '')}` |")
+    lines.append(f"| Corpus | `{_cell(config.get('corpus_path', ''))}` |")
+    lines.append(f"| Gold set | `{_cell(config.get('gold_path', ''))}` |")
+    lines.append(f"| Chunker | `{_cell(config.get('chunker', ''))}` |")
+    lines.append(f"| Embedder | `{_cell(config.get('embedder', ''))}` |")
+    lines.append(f"| k values | `{_cell(config.get('k_values', []))}` |")
+    lines.append(f"| Seed | `{_cell(config.get('seed', ''))}` |")
     lines.append("")
     lines.append("## Corpus stats")
     lines.append("")
     lines.append("| Field | Value |")
     lines.append("|---|---|")
     for k in sorted(corpus_stats.keys()):
-        lines.append(f"| {k} | `{corpus_stats[k]}` |")
+        lines.append(f"| {k} | `{_cell(corpus_stats[k])}` |")
     lines.append("")
     lines.append("## Aggregate metrics")
     lines.append("")
@@ -68,7 +87,7 @@ def render_markdown(run: Mapping[str, Any]) -> str:
         for k in sorted(diagnostics.keys()):
             if k == "size_histogram":
                 continue
-            lines.append(f"| {k} | `{diagnostics[k]}` |")
+            lines.append(f"| {k} | `{_cell(diagnostics[k])}` |")
         lines.append("")
         histogram = diagnostics.get("size_histogram") or {}
         if histogram:
@@ -121,7 +140,7 @@ def render_html(run: Mapping[str, Any]) -> str:
         )
 
     def row(k: str, v: Any) -> str:
-        return f"<tr><th>{esc(k)}</th><td>{esc(v)}</td></tr>"
+        return f"<tr><th>{esc(k)}</th><td>{esc(_cell(v))}</td></tr>"
 
     summary_rows = "".join(
         f"<tr><td>{esc(k)}</td><td>{float(summary[k]):.6f}</td></tr>"
@@ -150,9 +169,14 @@ def render_html(run: Mapping[str, Any]) -> str:
         rows_html: List[str] = []
         for pq in per_query:
             metrics = pq.get("metrics") or {}
-            cells = "".join(
-                f"<td>{float(metrics.get(k, 0.0)):.6f}</td>" for k in metric_keys
-            )
+            cell_chunks: List[str] = []
+            for k in metric_keys:
+                v = metrics.get(k)
+                if v is None:
+                    cell_chunks.append("<td>null</td>")
+                else:
+                    cell_chunks.append(f"<td>{float(v):.6f}</td>")
+            cells = "".join(cell_chunks)
             rows_html.append(
                 f"<tr><td>{esc(pq.get('query_id', ''))}</td>{cells}</tr>"
             )

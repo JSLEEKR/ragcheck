@@ -66,8 +66,43 @@ sync with the code.
 
 ### Quality gates at 1.0.0
 
-- 342 tests, 96% branch coverage
+- 353 tests, 96% branch coverage
 - `ruff check ragcheck/` clean
 - `mypy ragcheck/` clean
 - `ragcheck bench` 0.042s end-to-end on CPU
 - Byte-identical determinism verified per run pair
+
+## [1.0.1] - 2026-04-16
+
+### Fixed (Phase 3 Eval Cycle A — 8 bugs)
+
+- **Public API:** `ragcheck.load_result_json` and `ragcheck.dump_result_json`
+  are now exported from the top-level package. The README's programmatic
+  usage example referenced `ragcheck.load_result_json` which was not
+  actually importable at 1.0.0.
+- **`render_html`:** per-query metrics with a `None` value no longer crash
+  with `TypeError: float() argument must be ... not 'NoneType'`. They now
+  render as `null`, matching the Markdown path.
+- **`register_chunker`:** duplicate registrations now raise `ValueError`
+  instead of silently overwriting the existing factory. The README
+  documents this behaviour; it had been silently broken. Intentional
+  replacement is now opt-in via `override=True`.
+- **`SemanticBoundaryChunker`:** raw `\r\n` input is now normalised to
+  `\n` so paragraph breaks (`\r\n\r\n`) are recognised even when the
+  corpus was read in binary mode.
+- **`diff_runs` float boundary:** exact-threshold drops (e.g. 0.80 → 0.78
+  against a 0.02 threshold) are now classified as `flat` instead of
+  `degraded`. IEEE 754 subtraction imprecision had made the classification
+  order-dependent. Deltas are rounded to 6 decimals before comparison,
+  matching the serialised form.
+- **Report path normalisation:** Markdown and HTML reports now render
+  filesystem paths with forward slashes so reports generated on Windows
+  and Linux are byte-identical.
+- **README quickstart:** two copy-pasteable examples used wrong parameter
+  names (`window_tokens`/`stride_tokens` instead of `size`/`stride`, and
+  `overlap_chars` which doesn't exist on `SemanticBoundaryChunker`). Both
+  now use the real chunker signatures and are covered by regression tests.
+
+### Changed
+
+- Test count: 342 → 353 (11 regression tests added for the fixes above).

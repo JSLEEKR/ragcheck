@@ -290,3 +290,53 @@ class TestEmbeddersCommand:
         code, out, err = run_cli(["embedders"])
         assert code == EXIT_OK
         assert "hash" in out
+
+
+class TestReadmeQuickstart:
+    """Regression (H2): the two chunker-args examples shown in README must
+    parse and run. Previously:
+      - sliding-window used ``window_tokens``/``stride_tokens`` (actual
+        params are ``size``/``stride``)
+      - semantic-boundary used ``overlap_chars`` (no such parameter exists)
+    Both failed with exit code 2 on copy-paste. This test uses the exact
+    argument shapes now documented in the README.
+    """
+
+    def test_readme_sliding_window_example(self, tmp_path, tiny_corpus, tiny_gold):
+        out_path = tmp_path / "sliding.json"
+        code, out, err = run_cli([
+            "run",
+            "--corpus", str(tiny_corpus),
+            "--gold", str(tiny_gold),
+            "--out", str(out_path),
+            "--chunker", "sliding-window",
+            "--chunker-args", '{"size": 120, "stride": 60}',
+        ])
+        assert code == EXIT_OK, f"expected 0, got {code}: {err}"
+        assert out_path.exists()
+
+    def test_readme_semantic_boundary_example(self, tmp_path, tiny_corpus, tiny_gold):
+        out_path = tmp_path / "sb.json"
+        code, out, err = run_cli([
+            "run",
+            "--corpus", str(tiny_corpus),
+            "--gold", str(tiny_gold),
+            "--out", str(out_path),
+            "--chunker", "semantic-boundary",
+            "--chunker-args", '{"max_chars": 1200}',
+        ])
+        assert code == EXIT_OK, f"expected 0, got {code}: {err}"
+        assert out_path.exists()
+
+    def test_legacy_window_tokens_rejected(self, tmp_path, tiny_corpus, tiny_gold):
+        """Explicitly lock in that the old (wrong) parameter name errors."""
+        out_path = tmp_path / "x.json"
+        code, out, err = run_cli([
+            "run",
+            "--corpus", str(tiny_corpus),
+            "--gold", str(tiny_gold),
+            "--out", str(out_path),
+            "--chunker", "sliding-window",
+            "--chunker-args", '{"window_tokens": 120, "stride_tokens": 60}',
+        ])
+        assert code != EXIT_OK

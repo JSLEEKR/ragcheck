@@ -307,6 +307,10 @@ class SemanticBoundaryChunker:
     def chunk(self, doc_id: str, text: str) -> List[Chunk]:
         if not text.strip():
             return []
+        # Normalise CRLF so paragraph detection works on raw Windows input.
+        # Offsets returned below are relative to this normalised form.
+        if "\r" in text:
+            text = text.replace("\r\n", "\n").replace("\r", "\n")
         out: List[Chunk] = []
         paragraphs: List[tuple] = []  # (start, end, text)
         for match in re.finditer(r"[^\n]+(?:\n[^\n]+)*", text):
@@ -450,15 +454,29 @@ class StructuralMarkdownChunker:
 _REGISTRY: Dict[str, Callable[..., Chunker]] = {}
 
 
-def register_chunker(name: str, factory: Callable[..., Chunker]) -> None:
+def register_chunker(
+    name: str,
+    factory: Callable[..., Chunker],
+    *,
+    override: bool = False,
+) -> None:
     """Register a chunker factory under a string name.
 
     Factories are callables that accept keyword arguments and return a Chunker
     instance. Names are case-insensitive and trimmed.
+
+    Duplicate registrations raise ``ValueError`` to fail fast on collisions
+    between third-party plugins. Pass ``override=True`` to intentionally
+    replace an existing factory (useful in tests).
     """
     key = name.strip().lower()
     if not key:
         raise ValueError("chunker name must be non-empty")
+    if key in _REGISTRY and not override:
+        raise ValueError(
+            f"chunker {name!r} is already registered; "
+            f"pass override=True to replace it"
+        )
     _REGISTRY[key] = factory
 
 
