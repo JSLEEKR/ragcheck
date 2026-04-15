@@ -298,6 +298,32 @@ class TestRegistry:
         )
         assert "dup-override-test" in list_chunkers()
 
+    def test_readme_register_chunker_example_actually_works(self):
+        """Cycle C H2 regression.
+
+        README's "Register your own" example must execute cleanly. The
+        prior version showed a free function ``def my_chunker(doc_id,
+        text)`` which crashes inside ``get_chunker`` because the registry
+        tries to **construct** the factory before calling ``.chunk()``.
+        The contract is "factory returns an object with .chunk()" — the
+        README now mirrors that.
+        """
+        class MyChunker:
+            name = "my-chunker"
+
+            def __init__(self, max_chars: int = 500) -> None:
+                self.max_chars = max_chars
+
+            def chunk(self, doc_id: str, text: str):
+                return [Chunk(doc_id=doc_id, chunk_id="x", text=text, start=0, end=len(text))]
+
+        register_chunker("readme-example", MyChunker, override=True)
+        c = get_chunker("readme-example", max_chars=1200)
+        assert c.max_chars == 1200
+        chunks = c.chunk("d", "hello")
+        assert len(chunks) == 1
+        assert chunks[0].text == "hello"
+
 
 class TestChunkDataclass:
     def test_chunk_is_frozen(self):

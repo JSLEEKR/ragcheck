@@ -1,6 +1,6 @@
 # ragcheck
 
-[![tests](https://img.shields.io/badge/tests-362%20passing-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck/actions)
+[![tests](https://img.shields.io/badge/tests-370%20passing-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck/actions)
 [![coverage](https://img.shields.io/badge/coverage-96%25-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck)
 [![python](https://img.shields.io/badge/python-3.9%2B-blue?style=for-the-badge)](https://python.org)
 [![license](https://img.shields.io/badge/license-MIT-lightgrey?style=for-the-badge)](LICENSE)
@@ -9,7 +9,7 @@
 [![offline](https://img.shields.io/badge/runtime-offline-green?style=for-the-badge)](#installation)
 [![bench](https://img.shields.io/badge/bench-%3C1s-brightgreen?style=for-the-badge)](#benchmark)
 
-> **362 tests. Offline retrieval-quality harness for RAG systems. No LLM-as-judge.**
+> **370 tests. Offline retrieval-quality harness for RAG systems. No LLM-as-judge.**
 >
 > `recall@k`, `precision@k`, `hit_rate@k`, `MRR`, `nDCG` (binary + graded),
 > `context_precision`, `context_recall`, plus chunking diagnostics and
@@ -206,13 +206,24 @@ Register your own:
 ```python
 from ragcheck.chunkers import register_chunker, Chunk
 
-def my_chunker(doc_id: str, text: str) -> list[Chunk]:
-    ...
-register_chunker("my-chunker", my_chunker)
+class MyChunker:
+    name = "my-chunker"
+
+    def __init__(self, max_chars: int = 500) -> None:
+        self.max_chars = max_chars
+
+    def chunk(self, doc_id: str, text: str) -> list[Chunk]:
+        return [Chunk(doc_id=doc_id, chunk_id="x", text=text, start=0, end=len(text))]
+
+register_chunker("my-chunker", MyChunker)
+# get_chunker("my-chunker", max_chars=1200) constructs and returns an instance.
 ```
 
-Any callable accepting `(doc_id: str, text: str) -> list[Chunk]` works —
-no base class, no protocol inheritance required.
+`register_chunker` takes a **factory** (typically a class) that accepts
+keyword arguments and returns a chunker instance with a
+`.chunk(doc_id: str, text: str) -> list[Chunk]` method. Pass
+`override=True` to intentionally replace an existing factory; otherwise
+duplicate registrations raise `ValueError` to fail fast.
 
 ---
 
@@ -430,7 +441,7 @@ All three ship in `ragcheck.fixtures`; `bench` runs all three.
 git clone https://github.com/JSLEEKR/ragcheck.git
 cd ragcheck
 pip install -e ".[dev,sentence-transformers,openai]"
-pytest           # 362 tests pass (doc-drift guard included)
+pytest           # 370 tests pass (doc-drift guard included)
 ruff check ragcheck/
 mypy ragcheck/
 python -m ragcheck bench

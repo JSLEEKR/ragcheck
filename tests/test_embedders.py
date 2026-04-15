@@ -119,6 +119,48 @@ class TestNumpyEmbedder:
         with pytest.raises(ValueError):
             NumpyEmbedder.from_directory(tmp_path)
 
+    def test_rejects_2d_vector_in_mapping(self):
+        """Cycle C M1 regression.
+
+        A 2D array passed as an individual vector used to be silently
+        accepted, with ``dim`` set from ``shape[0]`` (the row count!) and
+        a confusing numpy broadcast error at ``embed()`` time. Now we
+        reject at construction with a clear message.
+        """
+        mapping = {"a": np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])}
+        with pytest.raises(ValueError, match=r"1D vectors"):
+            NumpyEmbedder(mapping)
+
+    def test_rejects_2d_vector_in_second_entry(self):
+        mapping = {
+            "a": np.array([1.0, 2.0, 3.0]),
+            "b": np.array([[1.0, 2.0, 3.0]]),
+        }
+        with pytest.raises(ValueError, match=r"1D vectors"):
+            NumpyEmbedder(mapping)
+
+    def test_rejects_zero_dim_vector(self):
+        mapping = {"a": np.array([], dtype=np.float64)}
+        with pytest.raises(ValueError, match=r"non-empty|dim 0"):
+            NumpyEmbedder(mapping)
+
+    def test_from_directory_rejects_1d_vectors_npy(self, tmp_path: Path):
+        """Cycle C M2 regression.
+
+        A 1D vectors.npy used to crash with ``IndexError: tuple index out
+        of range`` inside ``__init__``. Now it raises a clear ValueError.
+        """
+        np.save(tmp_path / "vectors.npy", np.array([1.0, 2.0, 3.0]))
+        (tmp_path / "ids.json").write_text(json.dumps(["a", "b", "c"]), encoding="utf-8")
+        with pytest.raises(ValueError, match=r"2D array"):
+            NumpyEmbedder.from_directory(tmp_path)
+
+    def test_from_directory_rejects_3d_vectors_npy(self, tmp_path: Path):
+        np.save(tmp_path / "vectors.npy", np.zeros((2, 3, 4)))
+        (tmp_path / "ids.json").write_text(json.dumps(["a", "b"]), encoding="utf-8")
+        with pytest.raises(ValueError, match=r"2D array"):
+            NumpyEmbedder.from_directory(tmp_path)
+
 
 class TestCosineSimilarity:
     def test_identical_vectors(self):

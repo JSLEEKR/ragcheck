@@ -85,6 +85,44 @@ class TestLoadCorpus:
         paths = list(iter_corpus_paths(tmp_path))
         assert len(paths) == 2
 
+    def test_ignores_hidden_directories(self, tmp_path: Path):
+        """Cycle C H1 regression: do not walk into hidden dirs like .git.
+
+        Without this guard, ``ragcheck run --corpus .`` from a repo root
+        would silently ingest .git/HEAD and any other dot-directory
+        contents as documents.
+        """
+        git = tmp_path / ".git"
+        git.mkdir()
+        (git / "config.txt").write_text("SECRET TOKEN", encoding="utf-8")
+        (git / "HEAD.md").write_text("ref: refs/heads/main", encoding="utf-8")
+        venv = tmp_path / ".venv"
+        venv.mkdir()
+        (venv / "stub.txt").write_text("stub", encoding="utf-8")
+        (tmp_path / "real.txt").write_text("real content", encoding="utf-8")
+        docs = load_corpus(tmp_path)
+        ids = [d.doc_id for d in docs]
+        assert ids == ["real"]
+        # Ensure the secret never even appears in the loaded corpus
+        for d in docs:
+            assert "SECRET" not in d.text
+
+    def test_ignores_nested_hidden_directories(self, tmp_path: Path):
+        """A hidden directory at any depth, not just the root."""
+        outer = tmp_path / "project"
+        outer.mkdir()
+        (outer / "doc.md").write_text("real", encoding="utf-8")
+        cache = outer / ".cache"
+        cache.mkdir()
+        (cache / "junk.md").write_text("internal", encoding="utf-8")
+        # Even doubly-nested
+        deep = outer / "a" / ".bin"
+        deep.mkdir(parents=True)
+        (deep / "blob.txt").write_text("never", encoding="utf-8")
+        docs = load_corpus(tmp_path)
+        ids = sorted(d.doc_id for d in docs)
+        assert ids == ["project/doc"]
+
 
 class TestLoadGoldSet:
     def test_basic(self, tmp_path: Path):

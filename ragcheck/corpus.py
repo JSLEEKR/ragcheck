@@ -80,8 +80,13 @@ def load_corpus(path: Path) -> List[Document]:
     """Load every .txt / .md file from a directory into a sorted Document list.
 
     Empty files are included. The doc_id is the path relative to the corpus
-    root, with forward-slash separators and no extension. Hidden files
-    (starting with `.`) are skipped.
+    root, with forward-slash separators and no extension.
+
+    Hidden files **and hidden directories** (any path component starting with
+    `.`) are skipped. Without this, calling ``ragcheck run --corpus .`` from a
+    repo root would silently ingest ``.git/HEAD``, ``.venv/`` markdown files,
+    or any other dot-directory contents into the corpus — a privacy and
+    correctness footgun. See Cycle C H1 in `CHANGELOG.md`.
     """
     root = Path(path)
     if not root.exists():
@@ -94,7 +99,11 @@ def load_corpus(path: Path) -> List[Document]:
             continue
         if file.suffix.lower() not in ALLOWED_EXTENSIONS:
             continue
-        if file.name.startswith("."):
+        # Skip hidden files AND any file under a hidden directory. Walking
+        # the relative path catches ``.git/config.txt``, ``.venv/X.md``,
+        # ``a/.cache/y.md`` etc.
+        rel_parts = file.relative_to(root).parts
+        if any(part.startswith(".") for part in rel_parts):
             continue
         rel = file.relative_to(root).as_posix()
         doc_id = rel.rsplit(".", 1)[0] if "." in rel else rel

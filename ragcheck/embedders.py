@@ -196,9 +196,27 @@ class NumpyEmbedder:
     def __init__(self, mapping: Dict[str, np.ndarray]) -> None:
         if not mapping:
             raise ValueError("NumpyEmbedder requires a non-empty mapping")
-        first = next(iter(mapping.values()))
+        first_key = next(iter(mapping))
+        first = mapping[first_key]
+        # Require exactly-1D vectors so callers can't accidentally pass a 2D
+        # batch and have us silently treat its row count as the embedding
+        # dimension (Cycle C M1). A 2D input leaves `shape[0]` as the row
+        # count, which would then fail later during `embed()` with a
+        # confusing numpy broadcast error.
+        if first.ndim != 1:
+            raise ValueError(
+                f"NumpyEmbedder expects 1D vectors, but {first_key!r} has "
+                f"shape {first.shape}. If you have a 2D matrix, use "
+                f"NumpyEmbedder.from_directory or build a dict keyed by id."
+            )
         dim = int(first.shape[0])
+        if dim == 0:
+            raise ValueError(f"NumpyEmbedder vectors must be non-empty; {first_key!r} has dim 0")
         for k, v in mapping.items():
+            if v.ndim != 1:
+                raise ValueError(
+                    f"NumpyEmbedder expects 1D vectors, but {k!r} has shape {v.shape}"
+                )
             if v.shape[0] != dim:
                 raise ValueError(
                     f"all vectors must have dim {dim}, but {k!r} has shape {v.shape}"
@@ -218,6 +236,16 @@ class NumpyEmbedder:
         with ids_path.open("r", encoding="utf-8") as f:
             ids = json.load(f)
         vectors = np.load(vec_path)
+        # Guard against 1D/0D matrices with a clear message (Cycle C M2).
+        # Without this, ``vectors.shape[0]`` on a 1D array is the scalar
+        # count and the per-id slice ``vectors[i]`` yields a 0D scalar,
+        # which explodes much later with ``IndexError: tuple index out of
+        # range`` during the dim check in ``__init__``.
+        if vectors.ndim != 2:
+            raise ValueError(
+                f"vectors.npy must be a 2D array of shape (n, dim), "
+                f"got ndim={vectors.ndim} shape={vectors.shape}"
+            )
         if len(ids) != vectors.shape[0]:
             raise ValueError(
                 f"ids.json length {len(ids)} does not match vectors.npy rows {vectors.shape[0]}"

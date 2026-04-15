@@ -156,3 +156,49 @@ sync with the code.
 - `ragcheck/report.py` introduces `_metric_cell` and `_is_null_float`
   helpers; the public renderers `render_html` and `render_markdown`
   retain their signatures.
+
+## [1.0.3] - 2026-04-16
+
+### Fixed (Phase 3 Eval Cycle C — 4 bugs)
+
+- **`load_corpus` walks into hidden directories (HIGH):** the corpus
+  loader skipped hidden *files* but not hidden *directories*. Calling
+  `ragcheck run --corpus .` from a repo root would silently ingest
+  `.git/HEAD`, any `*.txt`/`*.md` files under `.venv/`, build caches,
+  etc. — leaking sensitive content into the corpus and inflating
+  diagnostics. Now any path component that starts with `.` is skipped at
+  any depth. Two new regression tests (`test_ignores_hidden_directories`,
+  `test_ignores_nested_hidden_directories`) lock the contract.
+- **README `register_chunker` example was broken (HIGH):** the README
+  showed a free function `def my_chunker(doc_id, text)` and claimed "any
+  callable accepting `(doc_id, text)` works". Reality: `get_chunker`
+  *constructs* the registered factory with kwargs, so a free function
+  crashes immediately with `TypeError: my_chunker() missing 2 required
+  positional arguments`. Updated the README to a class-based example
+  (with `__init__` and `chunk` method) that mirrors the actual contract,
+  plus a regression test
+  (`test_readme_register_chunker_example_actually_works`).
+- **`NumpyEmbedder` silently accepted 2D arrays as 1D vectors (MEDIUM):**
+  `NumpyEmbedder({"a": np.array([[1,2,3],[4,5,6]])})` used to set
+  `dim = shape[0]` (2 — the row count!) and then crash much later inside
+  `embed()` with `ValueError: could not broadcast input array from
+  shape (6,) into shape (2,)`. Now rejected at construction with a clear
+  message; same enforcement when a later mapping entry has the wrong ndim
+  or a zero dim. Three regression tests added.
+- **`NumpyEmbedder.from_directory` exploded on 1D `vectors.npy` (MEDIUM):**
+  a 1D `vectors.npy` would crash with `IndexError: tuple index out of
+  range` deep inside `__init__`. Now the from-directory loader checks
+  `vectors.ndim == 2` up front and raises a clear ValueError pointing at
+  the actual shape. Two regression tests cover 1D and 3D inputs.
+
+### Changed
+
+- Test count: 362 → 370 (+8 regression tests: 2 corpus hidden-directory,
+  3 NumpyEmbedder shape-validation in mapping mode, 2 NumpyEmbedder
+  shape-validation in from-directory mode, 1 README chunker example).
+- `ragcheck/corpus.py::load_corpus` now skips files whose relative path
+  contains any dot-prefixed segment.
+- `ragcheck/embedders.py::NumpyEmbedder.__init__` and
+  `NumpyEmbedder.from_directory` now validate `ndim` up front.
+- `README.md` "Register your own" example replaced with a class-based
+  factory that round-trips through `register_chunker` + `get_chunker`.
