@@ -270,6 +270,95 @@ class TestSaveGoldSet:
         assert p.exists()
 
 
+class TestLoadCorpusSymlinkSafetyCycleD:
+    """Cycle D H1: load_corpus must not follow symlinks/junctions out of root."""
+
+    def test_windows_junction_is_skipped(self, tmp_path: Path):
+        """A directory junction (mklink /J) inside the corpus must NOT
+        be ingested if it points outside the corpus root.
+
+        On non-Windows or when junction creation fails, the test is
+        skipped — the probe cannot be constructed without cmd.exe.
+        """
+        import os
+        import subprocess
+
+        if os.name != "nt":
+            pytest.skip("directory junctions are a Windows feature")
+
+        secret = tmp_path / "secret"
+        secret.mkdir()
+        (secret / "password.txt").write_text("TOPSECRET", encoding="utf-8")
+        corpus = tmp_path / "corpus"
+        corpus.mkdir()
+        (corpus / "real.txt").write_text("real content", encoding="utf-8")
+
+        link = corpus / "escape"
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(secret)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            pytest.skip(f"mklink /J failed (not elevated?): {result.stderr}")
+
+        docs = load_corpus(corpus)
+        ids = {d.doc_id for d in docs}
+        assert "real" in ids, "legitimate corpus file must still be loaded"
+        assert "escape/password" not in ids, (
+            "directory junction escaping corpus root MUST be skipped"
+        )
+        # Ensure the secret text never ended up in any document
+        for d in docs:
+            assert "TOPSECRET" not in d.text
+
+    def test_posix_symlink_outside_root_is_skipped(self, tmp_path: Path):
+        """On POSIX, a file symlink pointing outside the corpus root
+        must be skipped. On Windows without admin, file symlink
+        creation fails and the test is skipped.
+        """
+        import os
+
+        secret = tmp_path / "secret"
+        secret.mkdir()
+        target = secret / "password.txt"
+        target.write_text("TOPSECRET", encoding="utf-8")
+        corpus = tmp_path / "corpus"
+        corpus.mkdir()
+        (corpus / "real.txt").write_text("real content", encoding="utf-8")
+        try:
+            os.symlink(target, corpus / "sym.txt")
+        except (OSError, NotImplementedError):
+            pytest.skip("symlink creation not permitted on this platform")
+
+        docs = load_corpus(corpus)
+        ids = {d.doc_id for d in docs}
+        assert "real" in ids
+        assert "sym" not in ids
+        for d in docs:
+            assert "TOPSECRET" not in d.text
+
+    def test_symlink_inside_root_is_allowed(self, tmp_path: Path):
+        """A symlink that still resolves inside the corpus root should
+        be loaded normally — only escapes are rejected.
+        """
+        import os
+
+        corpus = tmp_path / "corpus"
+        corpus.mkdir()
+        (corpus / "real.txt").write_text("original", encoding="utf-8")
+        try:
+            os.symlink(corpus / "real.txt", corpus / "link.txt")
+        except (OSError, NotImplementedError):
+            pytest.skip("symlink creation not permitted on this platform")
+
+        docs = load_corpus(corpus)
+        ids = {d.doc_id for d in docs}
+        # both 'real' and 'link' resolve inside corpus so both are loaded
+        assert "real" in ids
+        assert "link" in ids
+
+
 class TestDocumentAndQuery:
     def test_document_frozen(self):
         from dataclasses import FrozenInstanceError

@@ -317,3 +317,42 @@ class TestMetricConstants:
 
     def test_metric_names_nonempty(self):
         assert len(METRIC_NAMES) > 10
+
+
+class TestNdcgDuplicatesCycleD:
+    """Cycle D H2: nDCG must never exceed 1.0 when retrieved has duplicates."""
+
+    def test_ndcg_duplicates_bounded_by_one_binary(self):
+        # [A, A, B] with relevance {A:1, B:1} used to return ~1.307
+        val = ndcg_at_k(["a", "a", "b"], {"a": 1.0, "b": 1.0}, 3)
+        assert 0.0 <= val <= 1.0 + EPS, f"nDCG out of [0,1]: {val}"
+
+    def test_ndcg_all_duplicates_bounded_by_one(self):
+        val = ndcg_at_k(["a", "a", "a"], {"a": 1.0, "b": 1.0}, 3)
+        assert 0.0 <= val <= 1.0 + EPS, f"nDCG out of [0,1]: {val}"
+
+    def test_ndcg_triplicate_of_single_relevant(self):
+        # Ideal would put 'a' first once. Duplicates past the first are
+        # credited zero, so DCG == 1.0, iDCG == 1.0, nDCG == 1.0.
+        val = ndcg_at_k(["a", "a", "a"], {"a": 1.0}, 3)
+        assert val == pytest.approx(1.0, abs=EPS)
+
+    def test_ndcg_duplicates_graded(self):
+        # Graded relevance: duplicates of the highest-graded item collapse
+        # to 0 on second encounter.
+        val = ndcg_at_k(["a", "a", "b"], {"a": 3.0, "b": 2.0}, 3)
+        assert 0.0 <= val <= 1.0 + EPS, f"nDCG out of [0,1]: {val}"
+
+    def test_ndcg_unique_unchanged(self):
+        # A clean non-duplicate ranking must be identical before and after
+        # the fix: [a,b,c] with relevance {a:1,b:1,c:1} → 1.0.
+        val = ndcg_at_k(["a", "b", "c"], {"a": 1.0, "b": 1.0, "c": 1.0}, 3)
+        assert val == pytest.approx(1.0, abs=EPS)
+
+    def test_ndcg_duplicate_at_position_two_preserves_leading_credit(self):
+        # The first occurrence still contributes full gain; only the
+        # duplicate at position 2 is zeroed. gains=[1, 0, 1] vs ideal=[1,1].
+        val = ndcg_at_k(["a", "a", "b"], {"a": 1.0, "b": 1.0}, 3)
+        # Exact check: DCG = 1/log2(2) + 0 + 1/log2(4) = 1 + 0.5 = 1.5;
+        # iDCG = 1 + 1/log2(3) ~= 1.6309; nDCG ~= 0.9197
+        assert val == pytest.approx(1.5 / (1 + 1 / math.log2(3)), abs=1e-6)

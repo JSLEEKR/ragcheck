@@ -87,12 +87,21 @@ def load_corpus(path: Path) -> List[Document]:
     repo root would silently ingest ``.git/HEAD``, ``.venv/`` markdown files,
     or any other dot-directory contents into the corpus — a privacy and
     correctness footgun. See Cycle C H1 in `CHANGELOG.md`.
+
+    Symbolic links, Windows directory junctions, and any other filesystem
+    construct whose *resolved* path escapes the corpus root are skipped.
+    Without this guard a user could create ``corpus/escape`` as an ``mklink
+    /J`` junction pointing at ``%USERPROFILE%\\.ssh`` and ``ragcheck`` would
+    happily ingest private keys as if they were corpus documents (Cycle D H1).
+    ``resolve()`` follows all links down to the real path, so this catches
+    both POSIX symlinks and Windows directory junctions in one check.
     """
     root = Path(path)
     if not root.exists():
         raise FileNotFoundError(f"corpus directory not found: {root}")
     if not root.is_dir():
         raise NotADirectoryError(f"corpus path is not a directory: {root}")
+    root_resolved = root.resolve()
     docs: List[Document] = []
     for file in sorted(root.rglob("*")):
         if not file.is_file():
@@ -104,6 +113,14 @@ def load_corpus(path: Path) -> List[Document]:
         # ``a/.cache/y.md`` etc.
         rel_parts = file.relative_to(root).parts
         if any(part.startswith(".") for part in rel_parts):
+            continue
+        # Reject files that escape the corpus root via symlinks or
+        # Windows directory junctions. ``resolve()`` yields the final
+        # real path; if any link along the way pointed outside ``root``,
+        # ``relative_to`` raises ValueError and we skip the entry.
+        try:
+            file.resolve().relative_to(root_resolved)
+        except ValueError:
             continue
         rel = file.relative_to(root).as_posix()
         doc_id = rel.rsplit(".", 1)[0] if "." in rel else rel

@@ -58,6 +58,16 @@ class RunConfig:
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         d["k_values"] = sorted(set(int(k) for k in self.k_values))
+        # Cycle D M3: normalise Windows path separators to forward slashes
+        # in the serialised config. The Markdown and HTML renderers already
+        # do this for display (Cycle A M1), but the raw run JSON kept
+        # backslashes on Windows, which broke byte-identical cross-platform
+        # determinism and round-tripped ``\\U`` / ``\\0`` style escape
+        # sequences into any downstream JSON consumer.
+        if isinstance(d.get("corpus_path"), str):
+            d["corpus_path"] = d["corpus_path"].replace("\\", "/")
+        if isinstance(d.get("gold_path"), str):
+            d["gold_path"] = d["gold_path"].replace("\\", "/")
         return d
 
 
@@ -208,6 +218,7 @@ def run_evaluation(
     (for the CLI). A RunConfig is required; if not provided, a default
     config is constructed from the paths.
     """
+    corpus_provided_by_caller = corpus is not None
     if config is None:
         if corpus_path is None or gold_path is None:
             raise ValueError("either config or (corpus_path and gold_path) is required")
@@ -219,6 +230,19 @@ def run_evaluation(
         corpus = load_corpus(Path(config.corpus_path))
     if gold is None:
         gold = load_gold_set(Path(config.gold_path))
+    # Cycle D M1: surface an empty corpus (loaded from disk) as a clear
+    # error instead of silently returning zeroed metrics. Previously
+    # ``ragcheck run`` on a directory containing no readable files would
+    # print ``recall@5: 0.000000`` etc. with exit 0, giving the user no
+    # signal that the corpus was empty and every metric was meaningless.
+    # Callers that build an in-memory corpus (``corpus=[]``) are unchanged
+    # — that branch is used by internal tests.
+    if not corpus and not corpus_provided_by_caller:
+        raise ValueError(
+            f"corpus is empty: no .txt/.md files found under {config.corpus_path!r}. "
+            "Check the path and allowed extensions (.txt, .md, .rst, .markdown). "
+            "Hidden files and directories are skipped by design."
+        )
     if chunker is None:
         chunker = _build_chunker(config.chunker, config.chunker_args)
     if embedder is None:

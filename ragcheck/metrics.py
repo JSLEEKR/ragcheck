@@ -136,6 +136,13 @@ def ndcg_at_k(
       as 0. Binary relevance is supported by mapping relevant ids to 1.0.
     - If the ideal DCG is 0 (no positively-graded items exist for this query
       at all), returns 0.0.
+    - Duplicates in ``retrieved`` are credited only on their first occurrence;
+      later duplicates contribute zero gain. Without this guard a ranked list
+      like ``[A, A, B]`` against relevance ``{A: 1, B: 1}`` would produce a
+      DCG larger than the ideal DCG (which is computed over the distinct
+      positively-graded items), and ``nDCG`` could exceed ``1.0`` — a math
+      impossibility that would silently pass CI thresholds like
+      ``nDCG@5 >= 0.9``. Cycle D H2.
     """
     for rid, rv in relevance.items():
         if not isinstance(rid, str):
@@ -145,7 +152,14 @@ def ndcg_at_k(
     k_eff = _clip_k(retrieved, k) if k > 0 else 0
     if k_eff == 0:
         return 0.0
-    gains = [float(relevance.get(x, 0.0)) for x in retrieved[:k_eff]]
+    seen: set = set()
+    gains: List[float] = []
+    for x in retrieved[:k_eff]:
+        if x in seen:
+            gains.append(0.0)
+        else:
+            seen.add(x)
+            gains.append(float(relevance.get(x, 0.0)))
     dcg = dcg_at_k(gains, k_eff)
     ideal_gains = sorted((float(v) for v in relevance.values() if v > 0), reverse=True)
     if not ideal_gains:

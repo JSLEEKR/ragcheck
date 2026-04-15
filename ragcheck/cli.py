@@ -310,8 +310,12 @@ def _cmd_synth(args: argparse.Namespace, stdout, stderr) -> int:
     stdout.write(
         f"ragcheck: wrote {out_path} with {len(gold.questions)} synthetic questions\n"
     )
+    # Use ASCII-only text so the NOTE never crashes on non-UTF-8 consoles
+    # (e.g. Windows cp949 / cp932 / cp1252). An em-dash here used to crash
+    # the whole command with UnicodeEncodeError on Korean/Japanese Windows
+    # locales — see Cycle D H3.
     stdout.write(
-        "ragcheck: NOTE — these questions are synthetic, not human-graded. "
+        "ragcheck: NOTE - these questions are synthetic, not human-graded. "
         "Use for smoke-testing only.\n"
     )
     return EXIT_OK

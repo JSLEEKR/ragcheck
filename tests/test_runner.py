@@ -222,3 +222,87 @@ class TestPublicAPI:
         ragcheck.dump_result_json(result, p)
         loaded = ragcheck.load_result_json(p)
         assert loaded["tool_version"]
+
+
+class TestEmptyCorpusRaisesCycleD:
+    """Cycle D M1: ``run_evaluation`` with a filesystem ``corpus_path`` that
+    contains no ``.txt``/``.md`` files used to silently produce an
+    all-zeros summary, making it easy to misconfigure a run and see
+    ``recall@5 = 0.0`` without realising the corpus directory was empty or
+    pointed at the wrong place.
+
+    The in-memory path ``corpus=[]`` is still explicitly allowed (see
+    ``TestRelevanceResolution.test_empty_corpus_produces_zero_summary``) —
+    this guard only fires when we resolve an empty corpus from disk.
+    """
+
+    def test_empty_corpus_directory_raises_value_error(self, tmp_path: Path, tiny_gold: Path):
+        empty_dir = tmp_path / "empty-corpus"
+        empty_dir.mkdir()
+        config = RunConfig(corpus_path=str(empty_dir), gold_path=str(tiny_gold))
+        with pytest.raises(ValueError, match="corpus is empty"):
+            run_evaluation(config=config)
+
+    def test_empty_corpus_error_mentions_the_path(self, tmp_path: Path, tiny_gold: Path):
+        empty_dir = tmp_path / "none-here"
+        empty_dir.mkdir()
+        config = RunConfig(corpus_path=str(empty_dir), gold_path=str(tiny_gold))
+        with pytest.raises(ValueError) as exc:
+            run_evaluation(config=config)
+        assert str(empty_dir) in str(exc.value) or "none-here" in str(exc.value)
+
+    def test_in_memory_empty_corpus_still_allowed(self, tmp_path: Path):
+        """The programmatic ``corpus=[]`` path is an explicit opt-in (useful
+        for tests and library callers)—the guard must not break it."""
+        gold = GoldSet(questions=[Query(query_id="q", text="anything", relevance={"a": 1.0})])
+        config = RunConfig(corpus_path="(in-memory)", gold_path="(in-memory)")
+        result = run_evaluation(
+            corpus=[],
+            gold=gold,
+            config=config,
+            chunker=FixedTokenChunker(),
+            embedder=HashEmbedder(),
+        )
+        assert result.summary["recall@5"] == 0.0
+
+
+class TestJSONPathNormalizationCycleD:
+    """Cycle D M3: the JSON config block used to emit Windows-native
+    backslash separators (``corpus_path='tests\\\\fixtures\\\\corpus'``) which
+    made byte-identical diffing across Windows/POSIX impossible. Every
+    path-shaped field in ``config`` is now normalised to forward slashes
+    before serialisation.
+    """
+
+    def test_corpus_path_uses_forward_slashes_in_json(self, tmp_path: Path, tiny_gold: Path):
+        # Simulate a Windows-style path stored in the config
+        config = RunConfig(
+            corpus_path=r"tests\fixtures\corpus",
+            gold_path=r"tests\fixtures\gold.json",
+        )
+        d = config.to_dict()
+        assert "\\" not in d["corpus_path"], d["corpus_path"]
+        assert "/" in d["corpus_path"]
+        assert "\\" not in d["gold_path"], d["gold_path"]
+
+    def test_json_dump_contains_no_backslashes(self, tiny_corpus: Path, tiny_gold: Path, tmp_path: Path):
+        config = RunConfig(corpus_path=str(tiny_corpus), gold_path=str(tiny_gold))
+        result = run_evaluation(config=config)
+        out = tmp_path / "r.json"
+        dump_result_json(result, out)
+        text = out.read_text(encoding="utf-8")
+        data = json.loads(text)
+        # config block is the only place raw paths appear
+        cfg = data.get("config", {})
+        for key in ("corpus_path", "gold_path"):
+            if key in cfg and isinstance(cfg[key], str):
+                assert "\\" not in cfg[key], f"{key} leaked a backslash: {cfg[key]!r}"
+
+    def test_absolute_windows_path_gets_normalised(self):
+        config = RunConfig(
+            corpus_path=r"C:\Users\alice\data\corpus",
+            gold_path=r"D:\gold.json",
+        )
+        d = config.to_dict()
+        assert d["corpus_path"] == "C:/Users/alice/data/corpus"
+        assert d["gold_path"] == "D:/gold.json"

@@ -202,3 +202,86 @@ sync with the code.
   `NumpyEmbedder.from_directory` now validate `ndim` up front.
 - `README.md` "Register your own" example replaced with a class-based
   factory that round-trips through `register_chunker` + `get_chunker`.
+
+## [1.0.4] - 2026-04-16
+
+### Fixed (Phase 3 Eval Cycle D — 6 bugs)
+
+- **`load_corpus` symlink/junction escape (HIGH):** the corpus loader
+  resolved `Path.iterdir()` results without checking whether the resolved
+  target still lived under the corpus root. A symlink or Windows
+  directory junction planted inside the corpus could redirect into
+  `/etc`, `C:\Windows`, a sibling project's secrets, etc., and everything
+  reachable from there would be ingested as "corpus content". Fixed by
+  calling `root.resolve()` once and checking every candidate file with
+  `file.resolve().relative_to(root_resolved)`; anything escaping the
+  root is silently skipped. Three regression tests
+  (`TestLoadCorpusSymlinkSafetyCycleD`) cover POSIX symlinks, Windows
+  junctions, and internal symlinks (which must still be allowed).
+- **`ndcg_at_k` can exceed 1.0 on duplicated retrievals (HIGH):** if the
+  same relevant doc appears multiple times in the retrieved list, the
+  naive DCG loop credits each hit independently while the ideal DCG
+  assumes each relevant doc is counted once. `ndcg_at_k(["a","a","b"],
+  {"a": 1.0})` used to return `> 1.0`, which is mathematically
+  impossible and broke threshold comparisons for summary metrics.
+  Retrieved list is now deduped on-the-fly: duplicates contribute zero
+  gain. Six regression tests (`TestNdcgDuplicatesCycleD`) including a
+  property-style upper-bound check `0 ≤ ndcg@k ≤ 1` over random
+  permutations with duplicates.
+- **`ragcheck synth` crashes on non-UTF-8 consoles (HIGH):** the NOTE
+  line used a Unicode em-dash (`\u2014`), which is not representable in
+  cp949 (Korean), cp932 (Japanese), or cp1252 (Windows Western) default
+  consoles. The entire `synth` subcommand crashed mid-run with
+  `UnicodeEncodeError` for Korean and Japanese users. Replaced the
+  em-dash with a plain ASCII hyphen and added two regression tests:
+  one simulates cp949 via `TextIOWrapper(encoding="cp949",
+  errors="strict")` and confirms no crash, the other asserts every byte
+  emitted by synth is pure ASCII.
+- **Empty corpus directory silently returns zero metrics (MEDIUM):**
+  `run_evaluation(config=RunConfig(corpus_path="empty/"))` used to load
+  nothing from disk, then run every metric against the empty corpus and
+  report `recall@5 = 0.0` across the board. Users misconfiguring their
+  `--corpus` flag saw a clean green "zero hits" run instead of an
+  actionable error. Now raises `ValueError("corpus is empty: no .txt/.md
+  files found under ...")` when the path was loaded from disk and
+  produced an empty list. The in-memory `corpus=[]` opt-in path (used
+  by tests and library callers) is preserved.
+- **Test-count drift guard was too weak (MEDIUM):** `test_doc_drift.py`
+  only checked that `N tests` appeared somewhere in the README. The
+  shields.io badge uses `%20` instead of a literal space, so the badge
+  could drift independently and users would see a stale count on
+  GitHub. CHANGELOG wasn't checked at all. Added three stricter guards:
+  `test_readme_badge_count_matches_collected` (exact
+  `tests-N%20passing-brightgreen` pattern),
+  `test_readme_sentence_count_matches_collected` (exact
+  `**N tests. Offline` pattern), and
+  `test_changelog_references_current_count` (the current count must
+  appear in `CHANGELOG.md`).
+- **JSON config block uses Windows-native backslashes (MEDIUM):**
+  `RunConfig(corpus_path=r"a\b\c").to_dict()` serialised
+  `"corpus_path": "a\\b\\c"`, breaking byte-identical diffing across
+  Windows/POSIX and polluting comparison reports. Fixed by normalising
+  every path-shaped field in `to_dict()` to forward slashes (matching
+  `render_diff_markdown` + `render_report_markdown` which were already
+  doing this). Three regression tests including an absolute
+  `C:\Users\alice\data\corpus` → `C:/Users/alice/data/corpus` check.
+
+### Changed
+
+- Test count: 370 → 390 (+20 regression tests: 3 corpus symlink-safety,
+  6 nDCG duplicate-robustness, 2 synth cp949 safety, 3 empty-corpus
+  error, 3 stricter doc-drift, 3 JSON path-normalisation).
+- `ragcheck/corpus.py::load_corpus` now resolves the root once and
+  `relative_to`-checks every candidate file against it.
+- `ragcheck/metrics.py::ndcg_at_k` dedupes the retrieved list while
+  walking it so repeated ids contribute zero gain, guaranteeing
+  `0 ≤ ndcg ≤ 1`.
+- `ragcheck/cli.py::_cmd_synth` NOTE line is now pure ASCII.
+- `ragcheck/runner.py::run_evaluation` raises on empty filesystem
+  corpora; programmatic `corpus=[]` still works.
+- `ragcheck/runner.py::RunConfig.to_dict` normalises `corpus_path` and
+  `gold_path` to forward slashes for cross-platform byte-identical
+  output.
+- `tests/test_doc_drift.py` now pins the shields.io badge, the
+  README tagline sentence, and the CHANGELOG entry to the current
+  pytest-collected count.

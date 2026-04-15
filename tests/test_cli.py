@@ -239,6 +239,60 @@ class TestSynthCommand:
         assert code == EXIT_USAGE
 
 
+class TestSynthCp949SafeOutputCycleD:
+    """Cycle D H3: synth must never crash on non-UTF-8 consoles.
+
+    Before the fix, ``_cmd_synth`` wrote a NOTE containing an em-dash
+    (``\u2014``) which is unencodable in cp949/cp932/cp1252. Korean and
+    Japanese users running ``ragcheck synth`` would see a
+    ``UnicodeEncodeError`` mid-command. The regression test simulates a
+    cp949-only stdout by wrapping a BytesIO in a strict cp949 TextIOWrapper
+    and asserting the synth command still returns EXIT_OK (not a crash).
+    """
+
+    def test_synth_output_is_cp949_encodable(self, tiny_corpus, tmp_path: Path):
+        import io as _io
+        raw_out = _io.BytesIO()
+        raw_err = _io.BytesIO()
+        # cp949 has no em-dash — if synth emits one, .write() raises.
+        out = _io.TextIOWrapper(raw_out, encoding="cp949", errors="strict", newline="")
+        err = _io.TextIOWrapper(raw_err, encoding="cp949", errors="strict", newline="")
+        code = main(
+            [
+                "synth",
+                "--corpus", str(tiny_corpus),
+                "--questions", "2",
+                "--out", str(tmp_path / "g.json"),
+            ],
+            stdout=out,
+            stderr=err,
+        )
+        out.flush()
+        err.flush()
+        assert code == EXIT_OK
+        # Verify the NOTE sentence landed and contains a plain hyphen, not
+        # an em-dash (which would have already crashed above if present).
+        text = raw_out.getvalue().decode("cp949")
+        assert "synthetic" in text.lower()
+        assert "\u2014" not in text  # em-dash must not appear
+
+    def test_synth_note_is_ascii_only(self, tiny_corpus, tmp_path: Path):
+        """Every byte written by synth must be pure ASCII so the command
+        works on every legacy code page, not just cp949."""
+        code, out, err = run_cli([
+            "synth",
+            "--corpus", str(tiny_corpus),
+            "--questions", "2",
+            "--out", str(tmp_path / "g.json"),
+        ])
+        assert code == EXIT_OK
+        # The NOTE line specifically — ASCII-only
+        note_lines = [ln for ln in out.splitlines() if "NOTE" in ln]
+        assert note_lines, "synth NOTE line missing"
+        for ln in note_lines:
+            assert ln.encode("ascii", errors="strict")  # would raise otherwise
+
+
 class TestReportCommand:
     def test_renders_markdown(self, tiny_corpus, tiny_gold, tmp_path: Path):
         from ragcheck.runner import RunConfig, dump_result_json, run_evaluation

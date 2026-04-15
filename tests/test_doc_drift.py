@@ -71,6 +71,51 @@ class TestReadmeTestCountMatchesReality:
             f"README badge and the 'N tests' sentence."
         )
 
+    def test_readme_badge_count_matches_collected(self):
+        """Cycle D M2: the shields.io badge must carry the current count.
+
+        Without this check the drift guard only verified that ``N tests``
+        appeared *somewhere* in the README; the badge (which uses ``%20``
+        URL-escaping instead of a literal space) could drift independently
+        and users would see a stale count on GitHub.
+        """
+        text = README.read_text(encoding="utf-8")
+        actual = _collect_test_count()
+        badge_pattern = re.compile(rf"tests-{actual}%20passing-brightgreen")
+        assert badge_pattern.search(text), (
+            f"README shields.io badge is out of sync. Expected "
+            f"'tests-{actual}%20passing-brightgreen' somewhere in README.md."
+        )
+
+    def test_readme_sentence_count_matches_collected(self):
+        """Cycle D M2: the ``> **N tests.`` tagline must match reality.
+
+        Verifies the specific sentence on line 12 (``> **N tests. Offline
+        ...``) rather than any occurrence of ``N tests`` anywhere.
+        """
+        text = README.read_text(encoding="utf-8")
+        actual = _collect_test_count()
+        tagline_pattern = re.compile(rf"\*\*{actual}\s+tests\.\s+Offline")
+        assert tagline_pattern.search(text), (
+            f"README tagline ``**N tests. Offline ...`` is out of sync. "
+            f"Expected **{actual} tests**. to appear in the tagline."
+        )
+
+    def test_changelog_references_current_count(self):
+        """Cycle D M2: the CHANGELOG must also mention the current count.
+
+        Previously the drift guard only looked at README, so CHANGELOG
+        ``tests: N`` entries could drift out of sync silently.
+        """
+        path = REPO_ROOT / "CHANGELOG.md"
+        text = path.read_text(encoding="utf-8")
+        actual = _collect_test_count()
+        pattern = re.compile(rf"\b{actual}\b")
+        assert pattern.search(text), (
+            f"CHANGELOG.md does not mention the current test count {actual}. "
+            f"Update the top entry's 'tests:' line."
+        )
+
 
 class TestReadmeMentionsSubcommands:
     EXPECTED_SUBCOMMANDS = ["run", "diff", "bench", "synth", "report", "chunkers", "embedders"]
