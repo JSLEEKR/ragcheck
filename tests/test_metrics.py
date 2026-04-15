@@ -27,7 +27,6 @@ from ragcheck.metrics import (
     recall_at_k,
 )
 
-
 EPS = 1e-9
 
 

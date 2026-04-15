@@ -263,9 +263,10 @@ def _cmd_diff(args: argparse.Namespace, stdout, stderr) -> int:
             return EXIT_USAGE
         stdout.write(f"ragcheck: wrote {md_path}\n")
     if not args.out and not args.markdown:
-        # Default: print Markdown summary to stdout
-        stdout.write(render_diff_markdown(diff))
-        if not render_diff_markdown(diff).endswith("\n"):
+        # Default: print Markdown summary to stdout (render once)
+        rendered = render_diff_markdown(diff)
+        stdout.write(rendered)
+        if not rendered.endswith("\n"):
             stdout.write("\n")
     if args.no_fail:
         return EXIT_OK

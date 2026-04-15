@@ -5,7 +5,6 @@ import pytest
 
 from ragcheck.chunkers import Chunk
 from ragcheck.diagnostics import (
-    ChunkingDiagnostics,
     chunking_diagnostics,
     format_histogram_ascii,
 )
@@ -160,8 +159,8 @@ class TestHistogramFormatter:
         assert "b" in out
         # The row with higher count should have more # characters
         lines = out.split("\n")
-        a_line = next(l for l in lines if l.startswith("a"))
-        b_line = next(l for l in lines if l.startswith("b"))
+        a_line = next(line for line in lines if line.startswith("a"))
+        b_line = next(line for line in lines if line.startswith("b"))
         assert a_line.count("#") < b_line.count("#")
 
     def test_canonical_order_when_buckets_match(self):

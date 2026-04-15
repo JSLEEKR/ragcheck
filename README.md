@@ -1,6 +1,6 @@
 # ragcheck
 
-[![tests](https://img.shields.io/badge/tests-353%20passing-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck/actions)
+[![tests](https://img.shields.io/badge/tests-362%20passing-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck/actions)
 [![coverage](https://img.shields.io/badge/coverage-96%25-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck)
 [![python](https://img.shields.io/badge/python-3.9%2B-blue?style=for-the-badge)](https://python.org)
 [![license](https://img.shields.io/badge/license-MIT-lightgrey?style=for-the-badge)](LICENSE)
@@ -9,7 +9,7 @@
 [![offline](https://img.shields.io/badge/runtime-offline-green?style=for-the-badge)](#installation)
 [![bench](https://img.shields.io/badge/bench-%3C1s-brightgreen?style=for-the-badge)](#benchmark)
 
-> **353 tests. Offline retrieval-quality harness for RAG systems. No LLM-as-judge.**
+> **362 tests. Offline retrieval-quality harness for RAG systems. No LLM-as-judge.**
 >
 > `recall@k`, `precision@k`, `hit_rate@k`, `MRR`, `nDCG` (binary + graded),
 > `context_precision`, `context_recall`, plus chunking diagnostics and
@@ -85,8 +85,9 @@ ragcheck run --corpus ... --gold ... --out runs/candidate.json \
   --chunker sliding-window --chunker-args '{"size": 120, "stride": 60}'
 
 # 3. Diff
-ragcheck diff runs/baseline.json runs/candidate.json --fail-on-degraded
-# Exit 1 if any metric drops more than the threshold (default 0.02)
+ragcheck diff runs/baseline.json runs/candidate.json
+# Exit 1 if any metric drops more than the threshold (default 0.02).
+# Pass --no-fail to always exit 0 (e.g. for advisory CI checks).
 ```
 
 ---
@@ -95,10 +96,10 @@ ragcheck diff runs/baseline.json runs/candidate.json --fail-on-degraded
 
 ```
 ragcheck run       --corpus DIR --gold FILE [--chunker NAME] [--embedder NAME] --out FILE
-ragcheck diff      BASELINE.json HEAD.json [--thresholds KEY=VAL,...] [--fail-on-degraded]
+ragcheck diff      BASELINE.json HEAD.json [--threshold KEY=VAL ...] [--no-fail]
 ragcheck bench     [--json]
-ragcheck synth     --corpus DIR --out FILE [--n 50] [--seed 42]
-ragcheck report    --run FILE --format {json,markdown,html} --out FILE
+ragcheck synth     --corpus DIR --out FILE [--questions 50] [--seed 42]
+ragcheck report    --in FILE --format {json,md,html} [--out FILE]
 ragcheck chunkers  list
 ragcheck embedders list
 ```
@@ -115,18 +116,20 @@ ragcheck run \
   --chunker semantic-boundary \
   --chunker-args '{"max_chars": 1200}' \
   --embedder hash \
-  --top-k 10 \
+  --k 1,3,5,10 \
   --out runs/2026-04-16.json
 ```
 
 ### `ragcheck diff`
 
-Compute per-metric deltas between two runs. Exits 1 if any metric in
-`--thresholds` drops more than its threshold. Default threshold is
-**0.02** for every metric; override as `--thresholds recall@5=0.01,mrr=0.03`.
+Compute per-metric deltas between two runs. Exits 1 if any metric drops
+more than its threshold. Default threshold is **0.02** for every metric;
+override per-metric-prefix by repeating `--threshold KEY=VAL`. Pass
+`--no-fail` to always exit 0 (e.g. advisory CI).
 
 ```bash
-ragcheck diff runs/baseline.json runs/candidate.json --fail-on-degraded
+ragcheck diff runs/baseline.json runs/candidate.json \
+  --threshold recall@5=0.01 --threshold mrr=0.03
 ```
 
 ### `ragcheck bench`
@@ -270,8 +273,8 @@ Default threshold is `0.02` (2 points) for every metric.
 # Fail CI if recall@5 drops by more than 1 point, but tolerate 5-point changes
 # on the slow-moving context_recall
 ragcheck diff base.json head.json \
-  --thresholds 'recall@5=0.01,context_recall=0.05' \
-  --fail-on-degraded
+  --threshold recall@5=0.01 \
+  --threshold context_recall=0.05
 ```
 
 ---
@@ -365,6 +368,7 @@ independent components you can regress on separately.
 Every CLI operation is a pure Python function:
 
 ```python
+import ragcheck
 from ragcheck import RunConfig, run_evaluation, diff_runs
 
 result = run_evaluation(config=RunConfig(
@@ -372,7 +376,7 @@ result = run_evaluation(config=RunConfig(
     gold_path="./eval/gold.json",
     chunker="semantic-boundary",
     embedder="hash",
-    top_k=10,
+    top_k_cap=20,
 ))
 
 print(result.summary["recall@5"])
@@ -384,7 +388,7 @@ diff = diff_runs(
     ragcheck.load_result_json("runs/head.json"),
     fail_on_degraded=True,
 )
-if diff.any_degraded:
+if diff.degraded:
     raise SystemExit(1)
 ```
 
@@ -426,7 +430,7 @@ All three ship in `ragcheck.fixtures`; `bench` runs all three.
 git clone https://github.com/JSLEEKR/ragcheck.git
 cd ragcheck
 pip install -e ".[dev,sentence-transformers,openai]"
-pytest           # 353 tests pass (doc-drift guard included)
+pytest           # 362 tests pass (doc-drift guard included)
 ruff check ragcheck/
 mypy ragcheck/
 python -m ragcheck bench

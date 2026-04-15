@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import math
 
 import pytest
 
@@ -181,6 +181,82 @@ class TestRegressionCycleA:
         html = render_html(run)
         assert "C:/data/corpus" in html
         assert "C:\\data\\corpus" not in html
+
+
+class TestRegressionCycleB:
+    """Regression tests for bugs found in Phase 3 Eval Cycle B."""
+
+    def test_summary_nan_inf_render_as_null_markdown(self):
+        """Cycle B M2: NaN / +Inf / -Inf in the *summary* path must render as
+        ``null`` in Markdown rather than leaking ``nan`` / ``inf`` literals.
+        Cycle A only fixed the per-query path and missed this codepath.
+        """
+        run = {
+            "config": {"label": "x"},
+            "summary": {
+                "recall@5": float("nan"),
+                "mrr": float("inf"),
+                "ndcg@5": float("-inf"),
+                "precision@5": 0.5,
+            },
+            "corpus_stats": {},
+            "diagnostics": {},
+            "per_query": [],
+        }
+        md = render_markdown(run)
+        assert "nan" not in md.lower()
+        assert "inf" not in md.lower()
+        # Each non-finite metric should render as null
+        assert "| recall@5 | null |" in md
+        assert "| mrr | null |" in md
+        assert "| ndcg@5 | null |" in md
+        # Finite values still render with 6-decimal precision
+        assert "| precision@5 | 0.500000 |" in md
+
+    def test_summary_nan_inf_render_as_null_html(self):
+        run = {
+            "config": {"label": "x"},
+            "summary": {
+                "recall@5": float("nan"),
+                "mrr": float("inf"),
+                "ndcg@5": float("-inf"),
+                "precision@5": 0.5,
+            },
+            "corpus_stats": {},
+            "diagnostics": {},
+            "per_query": [],
+        }
+        html = render_html(run)
+        # Non-finite floats must be filtered out before string formatting
+        assert "nan" not in html.lower()
+        assert "inf" not in html.lower()
+        assert "<td>null</td>" in html
+        assert "0.500000" in html
+
+    def test_per_query_nan_inf_render_as_null(self):
+        run = {
+            "config": {"label": "x"},
+            "summary": {},
+            "corpus_stats": {},
+            "diagnostics": {},
+            "per_query": [
+                {
+                    "query_id": "q1",
+                    "metrics": {
+                        "recall@5": float("nan"),
+                        "mrr": float("inf"),
+                    },
+                },
+            ],
+        }
+        md = render_markdown(run)
+        html = render_html(run)
+        assert "nan" not in md.lower()
+        assert "inf" not in md.lower()
+        assert "nan" not in html.lower()
+        assert "inf" not in html.lower()
+        # Sanity: math.nan/inf would otherwise be the literal Python repr
+        assert math.isnan(float("nan"))
 
 
 class TestRenderDeterminism:

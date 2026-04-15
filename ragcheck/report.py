@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Any, List, Mapping
 
 from ragcheck.diagnostics import format_histogram_ascii
@@ -19,11 +20,29 @@ def _normalise_path_like(value: Any) -> Any:
     return value
 
 
+def _is_null_float(value: Any) -> bool:
+    """True if ``value`` is a non-finite float we should render as ``null``."""
+    return isinstance(value, float) and (math.isnan(value) or math.isinf(value))
+
+
 def _cell(value: Any) -> str:
-    """Render an arbitrary value as a report cell (None → ``null``)."""
-    if value is None:
+    """Render an arbitrary value as a report cell.
+
+    ``None`` and non-finite floats (NaN, ±Inf) both render as ``null`` so
+    byte-identical output is preserved even when callers construct runs by
+    hand (the runner itself already normalises NaN/Inf to None via
+    ``RunResult.to_dict``).
+    """
+    if value is None or _is_null_float(value):
         return "null"
     return str(_normalise_path_like(value))
+
+
+def _metric_cell(value: Any) -> str:
+    """Render a numeric metric value with 6-decimal precision, or ``null``."""
+    if value is None or _is_null_float(value):
+        return "null"
+    return f"{float(value):.6f}"
 
 
 def render_json(data: Any, *, pretty: bool = True) -> str:
@@ -73,11 +92,7 @@ def render_markdown(run: Mapping[str, Any]) -> str:
     lines.append("| Metric | Value |")
     lines.append("|---|---|")
     for k in sorted(summary.keys()):
-        value = summary[k]
-        if value is None:
-            lines.append(f"| {k} | null |")
-        else:
-            lines.append(f"| {k} | {float(value):.6f} |")
+        lines.append(f"| {k} | {_metric_cell(summary[k])} |")
     lines.append("")
     if diagnostics:
         lines.append("## Chunking diagnostics")
@@ -110,8 +125,7 @@ def render_markdown(run: Mapping[str, Any]) -> str:
                 metrics = pq.get("metrics") or {}
                 row = [str(pq.get("query_id", ""))]
                 for mk in metric_keys:
-                    v = metrics.get(mk)
-                    row.append(f"{float(v):.6f}" if v is not None else "null")
+                    row.append(_metric_cell(metrics.get(mk)))
                 lines.append("| " + " | ".join(row) + " |")
         lines.append("")
     return "\n".join(lines)
@@ -143,9 +157,8 @@ def render_html(run: Mapping[str, Any]) -> str:
         return f"<tr><th>{esc(k)}</th><td>{esc(_cell(v))}</td></tr>"
 
     summary_rows = "".join(
-        f"<tr><td>{esc(k)}</td><td>{float(summary[k]):.6f}</td></tr>"
+        f"<tr><td>{esc(k)}</td><td>{_metric_cell(summary[k])}</td></tr>"
         for k in sorted(summary.keys())
-        if summary[k] is not None
     )
     config_rows = "".join(row(k, config[k]) for k in sorted(config.keys()))
     corpus_rows = "".join(row(k, corpus_stats[k]) for k in sorted(corpus_stats.keys()))
@@ -171,11 +184,7 @@ def render_html(run: Mapping[str, Any]) -> str:
             metrics = pq.get("metrics") or {}
             cell_chunks: List[str] = []
             for k in metric_keys:
-                v = metrics.get(k)
-                if v is None:
-                    cell_chunks.append("<td>null</td>")
-                else:
-                    cell_chunks.append(f"<td>{float(v):.6f}</td>")
+                cell_chunks.append(f"<td>{_metric_cell(metrics.get(k))}</td>")
             cells = "".join(cell_chunks)
             rows_html.append(
                 f"<tr><td>{esc(pq.get('query_id', ''))}</td>{cells}</tr>"

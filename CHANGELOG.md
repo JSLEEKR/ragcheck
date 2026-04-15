@@ -66,7 +66,7 @@ sync with the code.
 
 ### Quality gates at 1.0.0
 
-- 353 tests, 96% branch coverage
+- 359 tests, 96% branch coverage
 - `ruff check ragcheck/` clean
 - `mypy ragcheck/` clean
 - `ragcheck bench` 0.042s end-to-end on CPU
@@ -106,3 +106,53 @@ sync with the code.
 ### Changed
 
 - Test count: 342 → 353 (11 regression tests added for the fixes above).
+
+## [1.0.2] - 2026-04-16
+
+### Fixed (Phase 3 Eval Cycle B — 7 bugs)
+
+- **`SemanticBoundaryChunker` offset corruption (HIGH):** Cycle A's CRLF
+  fix (`\r\n` → `\n` rebinding) left chunk `start`/`end` offsets in
+  normalised-text space, so `original[ch.start:ch.end] != ch.text`
+  whenever the input contained CRLF. `StructuralMarkdownChunker`
+  inherited the bug because it composes the inner chunker. Fixed by
+  detecting paragraphs with a CRLF-aware regex (no rebinding) so offsets
+  remain valid in the original text.
+- **Duplicate `TestSemanticBoundaryChunker` class (HIGH):** Cycle A
+  appended a second class with the same name to `tests/test_chunkers.py`,
+  silently dropping 5 of the 6 original SemanticBoundaryChunker tests
+  (Python class redefinition replaces the prior binding). Merged the two
+  classes so all tests run.
+- **README CLI documentation drift (HIGH):** README documented several
+  flags that don't exist (`--fail-on-degraded`, `--top-k`, `--n`,
+  `--run`, `--thresholds` plural, `--format markdown`). Replaced with
+  the actual CLI surface (`--no-fail`, `--k`, `--questions`, `--in`,
+  `--threshold` repeatable, `--format md`).
+- **README programmatic API drift (HIGH):** the example used
+  `RunConfig(top_k=10)` (wrong field — it's `top_k_cap`) and
+  `diff.any_degraded` (no such attribute — use the `diff.degraded` list).
+  Both updated and re-verified end-to-end.
+- **NaN/Inf summary leak in HTML/Markdown (MEDIUM):** Cycle A fixed the
+  per-query `None` handling but missed NaN/±Inf in the summary path —
+  they leaked as Python's `nan`/`inf` literals instead of `null`. Added
+  `_metric_cell` helper that handles both None and non-finite floats
+  uniformly across summary and per-query rendering.
+- **Test-suite ruff hygiene (MEDIUM):** the project's pyproject configures
+  ruff to scan the whole tree (`select = ["E","F","W","I","B"]`), but the
+  test files had 27 unresolved violations (unused imports, `B017` blind
+  `Exception`, `E741` ambiguous `l`, `F811` class redefinition, `F841`
+  unused locals). All resolved. Blind `pytest.raises(Exception)` now
+  asserts the specific `dataclasses.FrozenInstanceError`.
+- **`_cmd_diff` triple-render (LOW):** the diff CLI rendered the same
+  Markdown three times when neither `--out` nor `--markdown` was set.
+  Now renders once and reuses the string.
+
+### Changed
+
+- Test count: 353 → 362 (1 new regression test for the CRLF-offset bug;
+  +5 from the duplicate-class fix that restored silently-dropped tests;
+  +3 new regression tests covering NaN/Inf rendering in the summary path
+  for both Markdown and HTML, plus a per-query non-finite cross-check).
+- `ragcheck/report.py` introduces `_metric_cell` and `_is_null_float`
+  helpers; the public renderers `render_html` and `render_markdown`
+  retain their signatures.

@@ -4,8 +4,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from ragcheck.diff import (
     DEFAULT_THRESHOLDS,
     diff_runs,

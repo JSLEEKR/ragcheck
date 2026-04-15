@@ -307,13 +307,19 @@ class SemanticBoundaryChunker:
     def chunk(self, doc_id: str, text: str) -> List[Chunk]:
         if not text.strip():
             return []
-        # Normalise CRLF so paragraph detection works on raw Windows input.
-        # Offsets returned below are relative to this normalised form.
-        if "\r" in text:
-            text = text.replace("\r\n", "\n").replace("\r", "\n")
+        # Detect paragraphs using a regex that treats \n, \r, or \r\n as line
+        # terminators (so raw Windows CRLF input splits on blank lines just
+        # like LF input). Critically, offsets stay in the ORIGINAL text so
+        # that callers can slice ``text[chunk.start:chunk.end]`` and get back
+        # the stored chunk text. An earlier L1 fix (Cycle A) rebound ``text``
+        # to a normalised copy, which left offsets off-by-k whenever the
+        # input contained CRLF, corrupting chunks downstream (Cycle B).
         out: List[Chunk] = []
         paragraphs: List[tuple] = []  # (start, end, text)
-        for match in re.finditer(r"[^\n]+(?:\n[^\n]+)*", text):
+        # A paragraph is a maximal run of non-empty lines. A "line" is
+        # anything between two consecutive line terminators (\r\n, \n, or \r).
+        paragraph_re = re.compile(r"[^\r\n]+(?:(?:\r\n|\r|\n)[^\r\n]+)*")
+        for match in paragraph_re.finditer(text):
             paragraphs.append((match.start(), match.end(), match.group(0)))
         for p_start, p_end, p_text in paragraphs:
             if len(p_text) <= self.max_chars:

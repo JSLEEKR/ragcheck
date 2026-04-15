@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ragcheck.cli import EXIT_FAIL, EXIT_OK, EXIT_USAGE, main
+from ragcheck.cli import EXIT_OK, EXIT_USAGE, main
 
 
 def run_cli(argv, tmp_path: Path = None):

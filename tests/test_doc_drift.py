@@ -15,10 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 import ragcheck
-
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 README = REPO_ROOT / "README.md"

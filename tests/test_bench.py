@@ -1,10 +1,6 @@
 """Tests for the bundled benchmark runner."""
 from __future__ import annotations
 
-import json
-import time
-from pathlib import Path
-
 import pytest
 
 from ragcheck.bench import BenchResult, format_bench_table, run_bench

@@ -10,13 +10,9 @@ import json
 import time
 from pathlib import Path
 
-import pytest
-
 from ragcheck.cli import EXIT_OK, main
-from ragcheck.corpus import load_corpus, load_gold_set
 from ragcheck.fixtures import BEIR_FIQA_DIR, MS_MARCO_DIR, NEEDLE_DIR
 from ragcheck.fixtures.needle_haystack import materialise
-from ragcheck.runner import RunConfig, dump_result_json, run_evaluation
 
 
 def _cli(argv):

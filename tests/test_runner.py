@@ -2,15 +2,13 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from ragcheck.chunkers import FixedTokenChunker
-from ragcheck.corpus import Document, GoldSet, Query
-from ragcheck.embedders import HashEmbedder, NumpyEmbedder
+from ragcheck.corpus import GoldSet, Query
+from ragcheck.embedders import HashEmbedder
 from ragcheck.runner import (
     RunConfig,
     dump_result_json,
@@ -141,8 +139,8 @@ class TestJSONOutput:
         result = run_evaluation(config=config)
         p = tmp_path / "out.json"
         dump_result_json(result, p)
-        raw = json.loads(p.read_text(encoding="utf-8"))
-        # Top-level keys should appear sorted
+        # Load once to verify it parses, then inspect raw text for key order
+        json.loads(p.read_text(encoding="utf-8"))
         text = p.read_text(encoding="utf-8")
         first_keys_order = []
         for line in text.split("\n"):

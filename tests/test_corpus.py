@@ -234,9 +234,10 @@ class TestSaveGoldSet:
 
 class TestDocumentAndQuery:
     def test_document_frozen(self):
+        from dataclasses import FrozenInstanceError
         d = Document(doc_id="a", path="a.txt", text="hi")
-        with pytest.raises(Exception):
-            d.doc_id = "x"  # type: ignore
+        with pytest.raises(FrozenInstanceError):
+            d.doc_id = "x"  # type: ignore[misc]
 
     def test_query_to_dict_sorted(self):
         q = Query(

@@ -180,6 +180,31 @@ class TestSemanticBoundaryChunker:
     def test_name(self):
         assert SemanticBoundaryChunker().name == "semantic-boundary"
 
+    def test_crlf_paragraph_break_recognised(self):
+        """Regression (L1, Cycle A): \\r\\n\\r\\n paragraph breaks must split
+        into two paragraphs even when the input was never normalised."""
+        c = SemanticBoundaryChunker(max_chars=1000)
+        text = "First paragraph here.\r\n\r\nSecond paragraph here."
+        chunks = c.chunk("d1", text)
+        assert len(chunks) == 2
+        assert "First paragraph" in chunks[0].text
+        assert "Second paragraph" in chunks[1].text
+
+    def test_crlf_offsets_reference_original_text(self):
+        """Regression (Cycle B): after the L1 CRLF fix, chunker offsets must
+        still be valid indices into the ORIGINAL (non-normalised) text. A
+        bug in the initial L1 patch left offsets in normalised-text space,
+        so ``original[ch.start:ch.end] != ch.text``.
+        """
+        text = "First paragraph here.\r\n\r\nSecond paragraph here."
+        c = SemanticBoundaryChunker(max_chars=1000)
+        chunks = c.chunk("d1", text)
+        for ch in chunks:
+            assert text[ch.start:ch.end] == ch.text, (
+                f"offset mismatch: stored {ch.text!r} vs "
+                f"original[{ch.start}:{ch.end}]={text[ch.start:ch.end]!r}"
+            )
+
 
 class TestStructuralMarkdownChunker:
     def test_each_heading_is_own_chunk(self):
@@ -274,23 +299,12 @@ class TestRegistry:
         assert "dup-override-test" in list_chunkers()
 
 
-class TestSemanticBoundaryChunker:
-    def test_crlf_paragraph_break_recognised(self):
-        """Regression (L1): \\r\\n\\r\\n paragraph breaks must split into
-        two paragraphs even when the input was never normalised."""
-        c = SemanticBoundaryChunker(max_chars=1000)
-        text = "First paragraph here.\r\n\r\nSecond paragraph here."
-        chunks = c.chunk("d1", text)
-        assert len(chunks) == 2
-        assert "First paragraph" in chunks[0].text
-        assert "Second paragraph" in chunks[1].text
-
-
 class TestChunkDataclass:
     def test_chunk_is_frozen(self):
+        from dataclasses import FrozenInstanceError
         ch = Chunk(doc_id="d", chunk_id="c", text="t", start=0, end=1)
-        with pytest.raises(Exception):  # dataclass FrozenInstanceError
-            ch.doc_id = "x"  # type: ignore
+        with pytest.raises(FrozenInstanceError):
+            ch.doc_id = "x"  # type: ignore[misc]
 
     def test_chunk_defaults(self):
         ch = Chunk(doc_id="d", chunk_id="c", text="t", start=0, end=1)
