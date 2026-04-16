@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence
 
@@ -170,10 +173,87 @@ class OpenAIEmbedder:
             return None
 
     def _save_cached(self, text: str, vec: np.ndarray) -> None:
+        # Atomic write: render the payload into a uniquely-named temp file
+        # in the same directory, then ``os.replace`` it into place. Without
+        # this, two concurrent ``ragcheck run`` processes that both miss the
+        # cache for the same text would race on a plain ``open("w")`` — one
+        # truncates the file just as the other is mid-write, and the final
+        # JSON contains a coherent-looking vector whose values are an
+        # interleaved mash of both writers. The shape check passes, the
+        # embedding silently encodes the wrong text, and downstream
+        # similarity scores are corrupt with zero error signal. ``os.replace``
+        # is atomic on POSIX and on Windows (since Python 3.3 on NTFS) so
+        # readers either see the previous file or the complete new one,
+        # never a partially-written hybrid (Cycle F H1).
         p = self._cache_path(text)
         p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("w", encoding="utf-8") as f:
-            json.dump({"model": self.model, "vector": vec.tolist()}, f)
+        payload = json.dumps({"model": self.model, "vector": vec.tolist()})
+        # NamedTemporaryFile placed in the same directory so ``os.replace``
+        # is a same-volume rename (atomic). delete=False because we move it
+        # into place ourselves; we close before replacing for Windows.
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=p.name + ".", suffix=".tmp", dir=str(p.parent)
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(payload)
+            # Windows ``os.replace`` can briefly raise ``PermissionError``
+            # when another thread or an AV scanner holds the destination
+            # handle — this is a transient, well-known Windows quirk and
+            # has nothing to do with atomicity. Retry a few times with
+            # a tiny backoff before giving up. POSIX renames never hit
+            # this path. See https://bugs.python.org/issue46003.
+            last_err: OSError | None = None
+            for attempt in range(5):
+                try:
+                    os.replace(tmp_path, p)
+                    last_err = None
+                    break
+                except PermissionError as e:
+                    last_err = e
+                    if os.name != "nt":
+                        raise
+                    # 1ms, 2ms, 4ms, 8ms, 16ms — caps at ~30ms total.
+                    time.sleep(0.001 * (1 << attempt))
+            if last_err is not None:
+                # If the destination already contains a readable cache
+                # entry from another writer that won the race, treat our
+                # write as a no-op success (cache is content-addressed,
+                # so the on-disk bytes are semantically equivalent for
+                # this text). This turns a transient Windows rename
+                # failure into success in exactly the cases where the
+                # failure is benign.
+                try:
+                    existing = p.read_text(encoding="utf-8")
+                    obj = json.loads(existing)
+                    if (
+                        isinstance(obj, dict)
+                        and obj.get("model") == self.model
+                        and isinstance(obj.get("vector"), list)
+                    ):
+                        last_err = None
+                except (OSError, ValueError):
+                    pass
+            if last_err is not None:
+                raise last_err
+        except Exception:
+            # Best-effort cleanup if rename failed (e.g. permissions). The
+            # temp file is uniquely named so leaving it on disk would only
+            # waste space, not corrupt anything.
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+        else:
+            # Temp file was successfully renamed into place above; but if
+            # we took the benign-race recovery path the temp file is
+            # still on disk and must be cleaned up.
+            if os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     def embed(self, texts: Sequence[str]) -> np.ndarray:  # pragma: no cover
         out = np.zeros((len(texts), self.dim), dtype=np.float64)

@@ -149,6 +149,36 @@ def diff_runs(
         result.warnings.append(
             f"k_values differ: baseline={base_k}, head={head_k}"
         )
+    # Chunker or embedder drift also makes metric deltas potentially
+    # meaningless (a different chunker changes the entire retrieval
+    # pipeline), so warn on those too. Cycle E M2's code comment said
+    # this was intended but the actual logic only handled top_k_cap
+    # and k_values — chunker/embedder mismatches landed on the
+    # "silently improved" path. Cycle F H2.
+    base_chunker = base_cfg.get("chunker")
+    head_chunker = head_cfg.get("chunker")
+    if (
+        base_chunker is not None
+        and head_chunker is not None
+        and base_chunker != head_chunker
+    ):
+        result.warnings.append(
+            f"chunker differs: baseline={base_chunker!r}, head={head_chunker!r}; "
+            f"metric deltas reflect both retrieval and chunking changes and "
+            f"may not be directly comparable"
+        )
+    base_embedder = base_cfg.get("embedder")
+    head_embedder = head_cfg.get("embedder")
+    if (
+        base_embedder is not None
+        and head_embedder is not None
+        and base_embedder != head_embedder
+    ):
+        result.warnings.append(
+            f"embedder differs: baseline={base_embedder!r}, head={head_embedder!r}; "
+            f"metric deltas reflect embedding model differences and may not be "
+            f"directly comparable"
+        )
 
     for m in all_metrics:
         if m not in base_summary:

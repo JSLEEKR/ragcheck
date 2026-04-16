@@ -490,3 +490,85 @@ class TestSaveGoldSetSourceNormalizationCycleE:
             data = json.load(f)
         # source must never contain a backslash in the serialised form
         assert "\\" not in data["source"]
+
+
+class TestSaveGoldSetLineEndingsCycleF:
+    """Cycle F H3: save_gold_set must write LF line endings on every
+    platform. Python's text-mode line translation rewrites ``\\n`` to
+    ``\\r\\n`` on Windows unless ``newline="\\n"`` is passed, which
+    breaks byte-identical cross-platform determinism.
+
+    Every other JSON writer in the package already passes the kwarg;
+    ``save_gold_set`` was the lone holdout. These tests guard against
+    regressions that would reintroduce CRLF leakage.
+    """
+
+    def test_file_contains_no_crlf_bytes(self, tmp_path: Path):
+        # Multi-line JSON (indent=2) is the stress test: many newlines,
+        # any of which would be translated to CRLF on Windows without
+        # the newline kwarg.
+        gold = GoldSet(
+            version=1,
+            source="corpus",
+            questions=[
+                Query(
+                    query_id=f"q{i:03d}",
+                    text=f"question {i}",
+                    relevant_doc_ids=[f"doc_{i}"],
+                )
+                for i in range(5)
+            ],
+        )
+        out = tmp_path / "gold.json"
+        save_gold_set(gold, out)
+        raw = out.read_bytes()
+        assert b"\r\n" not in raw, (
+            "save_gold_set must never emit CRLF; cross-platform "
+            "determinism requires LF-only line endings"
+        )
+        # Sanity: must still contain LF newlines from indent=2.
+        assert raw.count(b"\n") > 3
+
+    def test_round_trip_after_write_is_byte_stable(self, tmp_path: Path):
+        gold = GoldSet(
+            version=1,
+            source="corpus",
+            questions=[
+                Query(query_id="q01", text="hello", relevant_doc_ids=["a"]),
+                Query(query_id="q02", text="world", relevant_doc_ids=["b"]),
+            ],
+        )
+        a = tmp_path / "a.json"
+        b = tmp_path / "b.json"
+        save_gold_set(gold, a)
+        reloaded = load_gold_set(a)
+        save_gold_set(reloaded, b)
+        # Byte-identical across save -> load -> save cycles.
+        assert a.read_bytes() == b.read_bytes()
+
+    def test_empty_gold_set_still_lf_only(self, tmp_path: Path):
+        gold = GoldSet(version=1, source="c")
+        out = tmp_path / "empty.json"
+        save_gold_set(gold, out)
+        raw = out.read_bytes()
+        assert b"\r\n" not in raw
+        assert raw.endswith(b"\n")
+
+    def test_matches_dump_result_json_line_ending_contract(self, tmp_path: Path):
+        # Cross-check: dump_result_json and dump_diff_json both emit
+        # LF-only. save_gold_set must follow the same contract so all
+        # JSON artifacts in a run directory share byte-identical line
+        # endings across OSes.
+        from ragcheck.diff import DiffResult, dump_diff_json
+
+        gold = GoldSet(
+            version=1,
+            source="c",
+            questions=[Query(query_id="q01", text="x")],
+        )
+        g_out = tmp_path / "gold.json"
+        d_out = tmp_path / "diff.json"
+        save_gold_set(gold, g_out)
+        dump_diff_json(DiffResult(), d_out)
+        assert b"\r\n" not in g_out.read_bytes()
+        assert b"\r\n" not in d_out.read_bytes()

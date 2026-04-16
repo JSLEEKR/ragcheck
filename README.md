@@ -1,6 +1,6 @@
 # ragcheck
 
-[![tests](https://img.shields.io/badge/tests-420%20passing-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck/actions)
+[![tests](https://img.shields.io/badge/tests-434%20passing-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck/actions)
 [![coverage](https://img.shields.io/badge/coverage-96%25-brightgreen?style=for-the-badge)](https://github.com/JSLEEKR/ragcheck)
 [![python](https://img.shields.io/badge/python-3.9%2B-blue?style=for-the-badge)](https://python.org)
 [![license](https://img.shields.io/badge/license-MIT-lightgrey?style=for-the-badge)](LICENSE)
@@ -9,7 +9,7 @@
 [![offline](https://img.shields.io/badge/runtime-offline-green?style=for-the-badge)](#installation)
 [![bench](https://img.shields.io/badge/bench-%3C1s-brightgreen?style=for-the-badge)](#benchmark)
 
-> **420 tests. Offline retrieval-quality harness for RAG systems. No LLM-as-judge.**
+> **434 tests. Offline retrieval-quality harness for RAG systems. No LLM-as-judge.**
 >
 > `recall@k`, `precision@k`, `hit_rate@k`, `MRR`, `nDCG` (binary + graded),
 > `context_precision`, `context_recall`, plus chunking diagnostics and
@@ -441,7 +441,7 @@ All three ship in `ragcheck.fixtures`; `bench` runs all three.
 git clone https://github.com/JSLEEKR/ragcheck.git
 cd ragcheck
 pip install -e ".[dev,sentence-transformers,openai]"
-pytest           # 420 tests pass (doc-drift guard included)
+pytest           # 434 tests pass (doc-drift guard included)
 ruff check ragcheck/
 mypy ragcheck/
 python -m ragcheck bench

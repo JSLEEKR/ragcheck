@@ -317,3 +317,111 @@ class TestOpenAICacheFaultInjectionCycleE:
         assert out is not None
         assert out.shape == (e.dim,)
         assert out[0] == 1.0
+
+
+class TestOpenAICacheAtomicWriteCycleF:
+    """Cycle F H1: ``_save_cached`` must be atomic.
+
+    Without atomic writes, two concurrent CLI invocations that both miss
+    the cache for the same text would race on a plain ``open("w")`` and
+    one writer can truncate the file just as another is in mid-write.
+    The result is silent semantic corruption — a JSON that parses, has
+    the right vector dim, but holds an interleaved byte mash of two
+    embeddings.
+    """
+
+    def test_save_uses_temp_file_and_atomic_replace(self, tmp_path, monkeypatch):
+        """Verify ``_save_cached`` writes to a temp file then ``os.replace``s.
+
+        We monkeypatch ``os.replace`` to capture the call; if the writer
+        is non-atomic (direct ``open("w")``), this assertion fails.
+        """
+        import os
+
+        import numpy as np
+
+        e = OpenAIEmbedder(cache_dir=tmp_path)
+        captured: list = []
+        real_replace = os.replace
+
+        def fake_replace(src, dst, *args, **kwargs):
+            captured.append((str(src), str(dst)))
+            return real_replace(src, dst, *args, **kwargs)
+
+        monkeypatch.setattr(
+            "ragcheck.embedders.os.replace", fake_replace, raising=False
+        )
+        vec = np.zeros(e.dim, dtype=np.float64)
+        vec[0] = 1.0
+        e._save_cached("hello", vec)
+        assert len(captured) == 1, "expected exactly one os.replace call"
+        src, dst = captured[0]
+        assert dst == str(e._cache_path("hello"))
+        assert src.endswith(".tmp"), f"src must be a temp file, got {src!r}"
+
+    def test_no_temp_files_left_behind_on_success(self, tmp_path):
+        """After a successful save, only the final cache file exists."""
+        import numpy as np
+
+        e = OpenAIEmbedder(cache_dir=tmp_path)
+        vec = np.zeros(e.dim, dtype=np.float64)
+        vec[0] = 1.0
+        e._save_cached("hello", vec)
+        # Final file is present
+        assert e._cache_path("hello").exists()
+        # No leftover .tmp files
+        leftovers = list(e.cache_dir.glob("*.tmp"))
+        assert leftovers == [], f"leftover temp files: {leftovers}"
+
+    def test_concurrent_writers_produce_one_consistent_payload(self, tmp_path):
+        """Race two writers; final file must be coherent (one writer wins entirely).
+
+        Atomic ``os.replace`` guarantees the reader either sees writer A's
+        bytes verbatim or writer B's bytes verbatim — never an interleaved
+        scramble.
+        """
+        import threading
+
+        import numpy as np
+
+        e = OpenAIEmbedder(cache_dir=tmp_path)
+        vec_a = np.zeros(e.dim, dtype=np.float64)
+        vec_a[:] = 1.0
+        vec_b = np.zeros(e.dim, dtype=np.float64)
+        vec_b[:] = 2.0
+        # Run many rounds to make any latent race statistically visible.
+        for _round in range(20):
+            t1 = threading.Thread(target=e._save_cached, args=("race", vec_a))
+            t2 = threading.Thread(target=e._save_cached, args=("race", vec_b))
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
+            loaded = e._load_cached("race")
+            assert loaded is not None, "load returned None on round {}".format(_round)
+            # Loaded vector must be entirely one writer's output, never a mix.
+            uniq = set(loaded.tolist())
+            assert uniq == {1.0} or uniq == {2.0}, (
+                f"interleaved values detected: {sorted(uniq)[:5]} (round {_round})"
+            )
+
+    def test_save_cleans_up_temp_on_replace_failure(self, tmp_path, monkeypatch):
+        """If ``os.replace`` fails, the temp file should not be left on disk."""
+        import numpy as np
+
+        e = OpenAIEmbedder(cache_dir=tmp_path)
+
+        def boom(src, dst, *args, **kwargs):
+            raise OSError("simulated replace failure")
+
+        monkeypatch.setattr(
+            "ragcheck.embedders.os.replace", boom, raising=False
+        )
+        vec = np.zeros(e.dim, dtype=np.float64)
+        vec[0] = 1.0
+        with pytest.raises(OSError, match="simulated replace failure"):
+            e._save_cached("err", vec)
+        # No leftover temp files
+        leftovers = list(e.cache_dir.glob("*.tmp"))
+        assert leftovers == [], f"leftover temp files: {leftovers}"
+

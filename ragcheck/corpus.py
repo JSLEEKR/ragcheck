@@ -197,13 +197,22 @@ def load_gold_set(path: Path) -> GoldSet:
 
 
 def save_gold_set(gold: GoldSet, path: Path) -> None:
-    """Write a gold set to JSON deterministically (sorted keys, utf-8).
+    """Write a gold set to JSON deterministically (sorted keys, utf-8, LF).
 
     The ``source`` field is normalised to forward-slash separators so a
     gold set produced on Windows is byte-identical to one produced on
     POSIX — otherwise ``ragcheck synth`` on Windows writes literal
     ``"C:\\\\Users\\\\..."`` into the gold JSON, breaking cross-platform
     determinism (Cycle E M2 — matches Cycle D M3's fix for RunConfig).
+
+    The file is opened with ``newline="\\n"`` so Python's text-mode line
+    translation does not silently rewrite ``\\n`` to ``\\r\\n`` on
+    Windows. Without this guard, a synth'd gold file on Windows is byte
+    -different from the same gold file on Linux, breaking the
+    cross-platform determinism contract (every other JSON writer in the
+    codebase — ``dump_result_json``, ``dump_diff_json``, the CLI
+    ``_write_out`` and ``--markdown`` paths — already pass this kwarg;
+    ``save_gold_set`` was the lone holdout). Cycle F H3.
     """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -211,7 +220,7 @@ def save_gold_set(gold: GoldSet, path: Path) -> None:
     src = data.get("source")
     if isinstance(src, str):
         data["source"] = src.replace("\\", "/")
-    with p.open("w", encoding="utf-8") as f:
+    with p.open("w", encoding="utf-8", newline="\n") as f:
         json.dump(
             data,
             f,

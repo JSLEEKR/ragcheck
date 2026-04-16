@@ -358,3 +358,97 @@ class TestDiffRunsTopKCapWarningCycleE:
         diff = diff_runs(base, head)
         assert diff.warnings
         assert diff.exit_code == 0  # still improved, warning is advisory
+
+
+class TestDiffChunkerEmbedderWarningCycleF:
+    """Cycle F H2: diff_runs must warn when baseline/head were run with
+    different chunker or embedder. Cycle E added a code comment claiming
+    this behaviour but only implemented top_k_cap / k_values warnings —
+    chunker/embedder mismatches landed on the silently-improved path.
+    Regression: verify the warnings now fire.
+    """
+
+    def _cfg_payload(self, summary: dict, cfg: dict) -> dict:
+        return {
+            "config": cfg,
+            "summary": dict(summary),
+            "corpus_stats": {"corpus_sha1": "abc"},
+        }
+
+    def test_different_chunker_emits_warning(self):
+        base = self._cfg_payload(
+            {"recall@5": 0.5},
+            {"label": "base", "chunker": "fixed-token", "embedder": "hash"},
+        )
+        head = self._cfg_payload(
+            {"recall@5": 0.6},
+            {"label": "head", "chunker": "sliding-window", "embedder": "hash"},
+        )
+        diff = diff_runs(base, head)
+        assert diff.warnings, "expected a warning when chunker differs"
+        assert any("chunker" in w for w in diff.warnings)
+        assert any("fixed-token" in w for w in diff.warnings)
+        assert any("sliding-window" in w for w in diff.warnings)
+
+    def test_different_embedder_emits_warning(self):
+        base = self._cfg_payload(
+            {"recall@5": 0.5},
+            {"label": "base", "chunker": "fixed-token", "embedder": "hash"},
+        )
+        head = self._cfg_payload(
+            {"recall@5": 0.6},
+            {"label": "head", "chunker": "fixed-token", "embedder": "openai"},
+        )
+        diff = diff_runs(base, head)
+        assert diff.warnings, "expected a warning when embedder differs"
+        assert any("embedder" in w for w in diff.warnings)
+        assert any("hash" in w for w in diff.warnings)
+        assert any("openai" in w for w in diff.warnings)
+
+    def test_same_chunker_and_embedder_no_pipeline_warning(self):
+        base = self._cfg_payload(
+            {"recall@5": 0.5},
+            {"label": "base", "chunker": "fixed-token", "embedder": "hash"},
+        )
+        head = self._cfg_payload(
+            {"recall@5": 0.6},
+            {"label": "head", "chunker": "fixed-token", "embedder": "hash"},
+        )
+        diff = diff_runs(base, head)
+        # No top_k_cap/k_values/chunker/embedder diff -> no warnings.
+        assert diff.warnings == []
+
+    def test_chunker_and_embedder_both_differ_emits_two_warnings(self):
+        base = self._cfg_payload(
+            {"recall@5": 0.5},
+            {"label": "base", "chunker": "fixed-token", "embedder": "hash"},
+        )
+        head = self._cfg_payload(
+            {"recall@5": 0.6},
+            {"label": "head", "chunker": "sentence", "embedder": "openai"},
+        )
+        diff = diff_runs(base, head)
+        assert any("chunker" in w for w in diff.warnings)
+        assert any("embedder" in w for w in diff.warnings)
+
+    def test_missing_chunker_field_does_not_warn(self):
+        # Older run payloads may not carry chunker/embedder fields.
+        # Absent fields must not fabricate a warning.
+        base = self._cfg_payload({"recall@5": 0.5}, {"label": "base"})
+        head = self._cfg_payload({"recall@5": 0.6}, {"label": "head"})
+        diff = diff_runs(base, head)
+        assert diff.warnings == []
+
+    def test_chunker_warning_appears_in_markdown(self):
+        base = self._cfg_payload(
+            {"recall@5": 0.5},
+            {"label": "base", "chunker": "fixed-token"},
+        )
+        head = self._cfg_payload(
+            {"recall@5": 0.6},
+            {"label": "head", "chunker": "sliding-window"},
+        )
+        diff = diff_runs(base, head)
+        md = render_diff_markdown(diff)
+        assert "## Warnings" in md
+        assert "chunker" in md

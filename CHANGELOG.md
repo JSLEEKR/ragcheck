@@ -203,6 +203,76 @@ sync with the code.
 - `README.md` "Register your own" example replaced with a class-based
   factory that round-trips through `register_chunker` + `get_chunker`.
 
+## [1.0.6] - 2026-04-16
+
+### Fixed (Phase 3 Eval Cycle F — 3 bugs)
+
+- **`OpenAIEmbedder` cache concurrent-writer race (HIGH):** `_save_cached`
+  opened the cache file directly with `open("w", ...)` and `json.dump`,
+  so two processes or two threads writing the same cache key could
+  interleave bytes on disk. Python `open("w")` truncates first and
+  writes without a lock, so a scrambled write could leave the file
+  containing a coherent-looking but interleaved vector — same dim,
+  same model field, but mixed values from both writers. Downstream
+  similarity scores would be silently wrong with zero error signal.
+  Fixed by writing to a same-directory temp file via `tempfile.mkstemp`
+  and atomically renaming into place with `os.replace`. Readers now
+  see either the old file or the complete new one, never a hybrid.
+  Windows `os.replace` can transiently raise `PermissionError` under
+  heavy contention (another writer won the race) — a 5-attempt
+  exponential backoff plus a benign-race recovery path treats those
+  as success when the destination already contains a valid cache
+  entry for the same model. Four regression tests
+  (`TestOpenAICacheAtomicWriteCycleF`) verify the temp-file pattern,
+  that no temp files leak on success, convergence under 20 rounds of
+  thread-race concurrency, and cleanup on `os.replace` failure.
+- **`diff_runs` silent chunker/embedder mismatch (HIGH):** Cycle E's
+  code comment claimed that chunker and embedder mismatches between
+  baseline and head would be warned about, but only `top_k_cap` and
+  `k_values` warnings were actually implemented. Comparing
+  `fixed-token + hash` against `sliding-window + openai` would
+  silently report metric deltas as "improved" or "degraded" even
+  though the two runs exercise entirely different retrieval
+  pipelines and the deltas are not directly attributable to any
+  single change. `diff_runs` now emits a separate warning for each
+  mismatched pipeline field, visible in both JSON `warnings` and the
+  rendered Markdown `## Warnings` section. Six regression tests
+  (`TestDiffChunkerEmbedderWarningCycleF`) cover chunker-only,
+  embedder-only, both-differ, no-diff (no warning), missing fields
+  (no warning), and Markdown round-trip.
+- **`save_gold_set` CRLF line-ending leak on Windows (HIGH):**
+  `save_gold_set` opened its output file without `newline="\n"`,
+  so Python's text-mode line-ending translation rewrote every
+  `\n` to `\r\n` on Windows. Every other JSON writer in the
+  package (`dump_result_json`, `dump_diff_json`, the CLI `_write_out`
+  and `--markdown` paths) already passes the kwarg; `save_gold_set`
+  was the lone holdout. A gold file synthesised on Windows was
+  byte-different from the same gold file synthesised on Linux,
+  breaking the documented cross-platform determinism contract.
+  Now opens with `newline="\n"`. Four regression tests
+  (`TestSaveGoldSetLineEndingsCycleF`) verify no CRLF bytes in
+  output, byte-stable round-tripping across save-load-save, LF-only
+  trailing newline on empty gold sets, and parity with
+  `dump_diff_json`'s line-ending contract.
+
+### Changed
+
+- Test count: 420 → 434 (+14 regression tests: 4 OpenAIEmbedder
+  atomic-write / concurrent-writer, 6 diff_runs chunker+embedder
+  warning, 4 save_gold_set line-ending contract).
+- `ragcheck/embedders.py::OpenAIEmbedder._save_cached` now writes
+  through a same-directory temp file and atomically renames with
+  `os.replace`; includes a 5-attempt Windows backoff with a
+  benign-race recovery path for PermissionError during rename.
+- `ragcheck/diff.py::diff_runs` now emits warnings for mismatched
+  `chunker` and `embedder` config fields in addition to the existing
+  `top_k_cap` and `k_values` warnings. Markdown rendering surfaces
+  all four under the same `## Warnings` section.
+- `ragcheck/corpus.py::save_gold_set` now opens its output file with
+  `newline="\n"` so the serialised gold JSON is byte-identical
+  across Windows and POSIX hosts, matching every other JSON writer
+  in the package.
+
 ## [1.0.5] - 2026-04-16
 
 ### Fixed (Phase 3 Eval Cycle E — 6 bugs)
