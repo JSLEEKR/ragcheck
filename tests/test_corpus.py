@@ -382,3 +382,111 @@ class TestDocumentAndQuery:
         out = g.to_dict()
         assert out["version"] == 1
         assert len(out["questions"]) == 1
+
+
+class TestLoadGoldSetFiniteRelevanceCycleE:
+    """Reject NaN/Inf in gold-set ``relevance`` at load time.
+
+    Cycle E M1: Python's json parser accepts literal ``NaN`` and
+    ``Infinity`` tokens as an extension of the JSON spec, so a gold
+    file containing ``"relevance": {"a": NaN}`` loaded without error.
+    The downstream failure was far from the source — the user saw
+    ``per-query score must be finite`` from ``aggregate_metric`` with
+    no indication that their gold file was the fault. The fix rejects
+    non-finite relevance right at the load boundary with an error that
+    mentions the id.
+    """
+
+    def test_load_rejects_nan_relevance(self, tmp_path):
+        p = tmp_path / "gold.json"
+        p.write_text(
+            '{"version":1,"questions":[{"query_id":"q1","text":"t",'
+            '"relevant_doc_ids":["a"],"relevance":{"a":NaN}}]}'
+        )
+        with pytest.raises(ValueError, match="finite"):
+            load_gold_set(p)
+
+    def test_load_rejects_positive_inf_relevance(self, tmp_path):
+        p = tmp_path / "gold.json"
+        p.write_text(
+            '{"version":1,"questions":[{"query_id":"q1","text":"t",'
+            '"relevant_doc_ids":["a"],"relevance":{"a":Infinity}}]}'
+        )
+        with pytest.raises(ValueError, match="finite"):
+            load_gold_set(p)
+
+    def test_load_rejects_negative_inf_relevance(self, tmp_path):
+        p = tmp_path / "gold.json"
+        p.write_text(
+            '{"version":1,"questions":[{"query_id":"q1","text":"t",'
+            '"relevant_doc_ids":["a"],"relevance":{"a":-Infinity}}]}'
+        )
+        with pytest.raises(ValueError):
+            load_gold_set(p)
+
+    def test_load_finite_relevance_still_works(self, tmp_path):
+        # Regression guard: the happy path still parses.
+        p = tmp_path / "gold.json"
+        p.write_text(
+            '{"version":1,"questions":[{"query_id":"q1","text":"t",'
+            '"relevant_doc_ids":["a"],"relevance":{"a":2.5}}]}'
+        )
+        gold = load_gold_set(p)
+        assert gold.questions[0].relevance == {"a": 2.5}
+
+
+class TestSaveGoldSetSourceNormalizationCycleE:
+    """``save_gold_set`` must emit forward-slash ``source`` on every OS.
+
+    Cycle E M3: Cycle D M3 normalised ``RunConfig.corpus_path`` /
+    ``gold_path`` in the run JSON so comparisons between Windows and
+    POSIX runs are byte-identical. But ``save_gold_set`` (used by
+    ``ragcheck synth``) wrote ``source = str(corpus_path)`` verbatim,
+    so a gold file produced by ``synth`` on Windows still contained
+    literal backslashes and was not byte-identical to one produced on
+    POSIX. This completes the cross-platform determinism contract for
+    every JSON artefact ragcheck emits.
+    """
+
+    def test_save_gold_set_normalises_source_path(self, tmp_path):
+        gold = GoldSet(
+            version=1,
+            source=r"C:\Users\alice\corpus",
+            questions=[Query(query_id="q1", text="a")],
+            synthetic=True,
+        )
+        out = tmp_path / "gold.json"
+        save_gold_set(gold, out)
+        with out.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert data["source"] == "C:/Users/alice/corpus"
+
+    def test_save_gold_set_posix_source_unchanged(self, tmp_path):
+        gold = GoldSet(
+            version=1,
+            source="/home/alice/corpus",
+            questions=[Query(query_id="q1", text="a")],
+        )
+        out = tmp_path / "gold.json"
+        save_gold_set(gold, out)
+        with out.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert data["source"] == "/home/alice/corpus"
+
+    def test_synth_round_trip_source_forward_slash(self, tmp_path):
+        # End-to-end: synth on Windows-style path yields a forward-slash
+        # source field in the gold JSON, mirroring RunConfig path
+        # normalisation so cross-platform determinism holds for the
+        # synth subcommand as well.
+        from ragcheck.synth import synth_gold_set
+        corpus = tmp_path / "corpus"
+        corpus.mkdir()
+        (corpus / "a.txt").write_text("Hello world. A test document.")
+        (corpus / "b.txt").write_text("Another doc. Different words.")
+        gold = synth_gold_set(corpus, n_questions=2, seed=42)
+        out = tmp_path / "gold.json"
+        save_gold_set(gold, out)
+        with out.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        # source must never contain a backslash in the serialised form
+        assert "\\" not in data["source"]

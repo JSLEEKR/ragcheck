@@ -69,6 +69,7 @@ class DiffResult:
     flat: List[str] = field(default_factory=list)
     exit_code: int = 0
     corpus_changed: bool = False
+    warnings: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -81,6 +82,7 @@ class DiffResult:
                 "improved": sorted(self.improved),
                 "flat": sorted(self.flat),
             },
+            "warnings": sorted(self.warnings),
             "deltas": [d.to_dict() for d in sorted(self.deltas, key=lambda x: x.metric)],
         }
 
@@ -122,6 +124,31 @@ def diff_runs(
     head_sha = str(head.get("corpus_stats", {}).get("corpus_sha1", ""))
     if base_sha and head_sha and base_sha != head_sha:
         result.corpus_changed = True
+
+    # Configuration drift warnings. Comparing two runs that measured
+    # recall@10 against different ``top_k_cap`` values is meaningless:
+    # the run with ``top_k_cap=5`` literally could not report any
+    # retrievals in positions 6-10, so recall@10 is artificially
+    # truncated. Warn instead of silently accepting the comparison
+    # (Cycle E M2). Same logic for mismatched ``k_values`` lists and
+    # different chunker or embedder names (which also make metric
+    # deltas potentially meaningless but are legitimate comparisons).
+    base_cfg = baseline.get("config", {}) or {}
+    head_cfg = head.get("config", {}) or {}
+    base_cap = base_cfg.get("top_k_cap")
+    head_cap = head_cfg.get("top_k_cap")
+    if base_cap is not None and head_cap is not None and base_cap != head_cap:
+        result.warnings.append(
+            f"top_k_cap differs: baseline={base_cap}, head={head_cap}; "
+            f"metrics computed over different retrieval windows may not be "
+            f"directly comparable"
+        )
+    base_k = base_cfg.get("k_values")
+    head_k = head_cfg.get("k_values")
+    if base_k is not None and head_k is not None and base_k != head_k:
+        result.warnings.append(
+            f"k_values differ: baseline={base_k}, head={head_k}"
+        )
 
     for m in all_metrics:
         if m not in base_summary:
@@ -211,6 +238,12 @@ def render_diff_markdown(diff: DiffResult) -> str:
     lines.append(f"- **Improved**: {len(diff.improved)}")
     lines.append(f"- **Flat**: {len(diff.flat)}")
     lines.append("")
+    if diff.warnings:
+        lines.append("## Warnings")
+        lines.append("")
+        for w in sorted(diff.warnings):
+            lines.append(f"- {w}")
+        lines.append("")
     if diff.degraded:
         lines.append("## Degraded metrics")
         lines.append("")

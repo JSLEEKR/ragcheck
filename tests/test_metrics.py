@@ -356,3 +356,51 @@ class TestNdcgDuplicatesCycleD:
         # Exact check: DCG = 1/log2(2) + 0 + 1/log2(4) = 1 + 0.5 = 1.5;
         # iDCG = 1 + 1/log2(3) ~= 1.6309; nDCG ~= 0.9197
         assert val == pytest.approx(1.5 / (1 + 1 / math.log2(3)), abs=1e-6)
+
+
+class TestRelevanceFiniteRejectionCycleE:
+    """``relevance`` values must be finite; ``rv < 0`` alone was insufficient.
+
+    Cycle E H3: ``NaN < 0`` is ``False`` and ``+Inf < 0`` is also ``False``,
+    so the ``relevance value must be >= 0`` guard in ``ndcg_at_k`` let
+    those slip through. ``dcg_at_k`` then computed ``2^NaN - 1 = NaN`` and
+    the whole per-query metric became NaN. Downstream, ``aggregate_metric``
+    raised a *different* error message ("per-query score must be finite,
+    got nan") that gave the user no idea the real fault was their gold
+    file. The fix rejects non-finite relevance at the metric boundary
+    with an explicit, actionable error.
+    """
+
+    def test_ndcg_rejects_nan_relevance(self):
+        with pytest.raises(ValueError, match="finite"):
+            ndcg_at_k(["a"], {"a": float("nan")}, k=1)
+
+    def test_ndcg_rejects_positive_inf_relevance(self):
+        with pytest.raises(ValueError, match="finite"):
+            ndcg_at_k(["a"], {"a": float("inf")}, k=1)
+
+    def test_ndcg_rejects_negative_inf_relevance(self):
+        # Negative inf is also caught (the ``< 0`` check would fire too,
+        # but we want a uniform "finite" error message).
+        with pytest.raises(ValueError):
+            ndcg_at_k(["a"], {"a": float("-inf")}, k=1)
+
+    def test_ndcg_negative_relevance_still_rejected(self):
+        # Regression guard: the existing ``>= 0`` rejection still works.
+        with pytest.raises(ValueError, match=">= 0|finite"):
+            ndcg_at_k(["a"], {"a": -1.0}, k=1)
+
+    def test_dcg_rejects_nan_gain(self):
+        from ragcheck.metrics import dcg_at_k
+        with pytest.raises(ValueError, match="finite"):
+            dcg_at_k([float("nan")], k=1)
+
+    def test_dcg_rejects_inf_gain(self):
+        from ragcheck.metrics import dcg_at_k
+        with pytest.raises(ValueError, match="finite"):
+            dcg_at_k([float("inf")], k=1)
+
+    def test_ndcg_finite_values_still_work(self):
+        # Happy path: finite inputs should not be affected by the fix.
+        val = ndcg_at_k(["a", "b"], {"a": 2.0, "b": 1.0}, k=2)
+        assert val == pytest.approx(1.0)

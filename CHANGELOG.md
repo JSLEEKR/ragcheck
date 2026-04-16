@@ -203,6 +203,87 @@ sync with the code.
 - `README.md` "Register your own" example replaced with a class-based
   factory that round-trips through `register_chunker` + `get_chunker`.
 
+## [1.0.5] - 2026-04-16
+
+### Fixed (Phase 3 Eval Cycle E — 6 bugs)
+
+- **`OpenAIEmbedder` cache corruption crash (HIGH):** `_load_cached`
+  decoded cached JSON without validation. A truncated write, a manually
+  edited cache file, or a file written by a prior run with a different
+  `dim` would raise deep inside `np.asarray` (or succeed and return a
+  vector of the wrong shape), crashing every subsequent `embed_many`
+  call for that text. The cache is now validated on read: missing
+  `vector` key, wrong ndim, or wrong dim all trigger `_cache_path.unlink()`
+  and fall through to a live API call. `OSError`/`ValueError`/`TypeError`/
+  `JSONDecodeError` are all caught uniformly. Six regression tests
+  (`TestOpenAICacheFaultInjectionCycleE`) inject truncated JSON, wrong
+  dim, wrong ndim, non-dict payloads, empty files, and bare strings.
+- **`StructuralMarkdownChunker` offset invariant violation (HIGH):**
+  section text was `.rstrip()`ped before chunking while `section_end`
+  still pointed at the un-stripped end of the section, so
+  `text[chunk.start:chunk.end] != chunk.text` whenever a section ended
+  with trailing whitespace. Fixed by shrinking `section_end` to match
+  the rstripped length before constructing chunks, preserving the
+  contract that chunk offsets can always be used to recover the original
+  text slice. Four regression tests
+  (`TestStructuralMarkdownOffsetInvariantCycleE`) cover trailing
+  whitespace, multiple sections each with trailing whitespace, mixed
+  CRLF+trailing, and a property-style invariant check.
+- **`ndcg_at_k`/`dcg_at_k` silently accept NaN/Inf gains (HIGH):** the
+  existing `< 0` rejection could not catch NaN (NaN comparisons return
+  `False`) or `+Inf` (valid comparison, but propagates to `sum` →
+  infinite DCG → `nan` nDCG after division). A corrupted gold set or a
+  library caller passing `float("nan")` as a relevance would silently
+  poison summary metrics. Added explicit `math.isnan`/`math.isinf`
+  checks before the sign check in both `dcg_at_k` and `ndcg_at_k`
+  (ideal side as well). Seven regression tests
+  (`TestRelevanceFiniteRejectionCycleE`) cover NaN, +Inf, -Inf in both
+  functions plus a round-trip through `aggregate_metric`.
+- **`load_gold_set` accepts NaN/Inf relevance in JSON (MEDIUM):** the
+  Python stdlib json module accepts `NaN`, `Infinity`, `-Infinity` as
+  number literals by default. A gold file containing
+  `"relevance": {"doc-1": NaN}` would load silently and then crash
+  nDCG inside `aggregate_metric`. Now rejected at load time with a
+  clear error pointing at the offending key. Four regression tests
+  (`TestLoadGoldSetFiniteRelevanceCycleE`).
+- **`diff_runs` silently accepts incompatible `top_k_cap` (MEDIUM):**
+  comparing a run with `top_k_cap=5` against one with `top_k_cap=10`
+  is meaningless for `recall@10` — the first run literally could not
+  have observed any retrievals in positions 6-10, so the "degraded"
+  signal is artificial. The diff now emits a warning (visible in both
+  the JSON `warnings` array and the rendered Markdown under a
+  `## Warnings` section) whenever `top_k_cap` or `k_values` differ
+  between baseline and head. The warning does not change the exit
+  code — it's a legitimate comparison — but it's now impossible to miss.
+  Covered by `TestDiffRunsTopKCapWarningCycleE`.
+- **`save_gold_set` leaks native path separators (MEDIUM):** gold entries
+  with a `source` like `docs\\part1\\intro.md` were serialised as-is,
+  breaking byte-identical diffs between Windows and POSIX gold files and
+  round-tripping unexpectedly through `load_gold_set`. Now normalised to
+  forward slashes on write, matching `load_corpus` and
+  `render_diff_markdown`. Three regression tests
+  (`TestSaveGoldSetSourceNormalizationCycleE`).
+
+### Changed
+
+- Test count: 390 → 420 (+30 regression tests: 6 OpenAIEmbedder cache
+  fault injection, 4 StructuralMarkdownChunker offset invariant, 7 DCG/nDCG
+  finite-relevance rejection, 4 load_gold_set NaN relevance, 3 save_gold_set
+  path normalisation, 6 diff_runs top_k_cap/k_values warning).
+- `ragcheck/embedders.py::OpenAIEmbedder._load_cached` now validates
+  cached payload shape and deletes corrupted cache entries on read.
+- `ragcheck/chunkers.py::StructuralMarkdownChunker.chunk` now shrinks
+  `section_end` to match the rstripped section text, preserving the
+  `text[start:end] == chunk.text` invariant.
+- `ragcheck/metrics.py::dcg_at_k` and `ndcg_at_k` reject NaN/Inf gains
+  and relevance values before the sign check.
+- `ragcheck/corpus.py::load_gold_set` rejects non-finite relevance
+  values at load time; `save_gold_set` now normalises `source` paths to
+  forward slashes.
+- `ragcheck/diff.py::DiffResult` gains a `warnings` field populated
+  whenever baseline and head disagree on `top_k_cap` or `k_values`;
+  rendered in both JSON and Markdown output.
+
 ## [1.0.4] - 2026-04-16
 
 ### Fixed (Phase 3 Eval Cycle D — 6 bugs)

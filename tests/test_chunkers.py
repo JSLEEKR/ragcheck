@@ -335,3 +335,65 @@ class TestChunkDataclass:
     def test_chunk_defaults(self):
         ch = Chunk(doc_id="d", chunk_id="c", text="t", start=0, end=1)
         assert ch.meta == {}
+
+
+class TestStructuralMarkdownOffsetInvariantCycleE:
+    """``text[ch.start:ch.end] == ch.text`` for every emitted chunk.
+
+    Cycle E H2: StructuralMarkdownChunker applied ``.rstrip()`` to the
+    section text without shrinking ``section_end``. As a result, any
+    section followed by blank lines before the next heading (which is
+    the *default* Markdown style!) emitted a chunk where the stored
+    text was shorter than its ``[start, end)`` range, so downstream
+    code that tried to resolve ``text[chunk.start:chunk.end]`` back to
+    the chunk text got a mismatch. Cycle B fixed this same invariant
+    for SemanticBoundaryChunker (H1) but missed this sibling class.
+    """
+
+    def test_simple_two_sections_offset_invariant(self):
+        from ragcheck.chunkers import StructuralMarkdownChunker
+        text = "# Heading\n\nSome content\n\n\n\n# Heading 2\n\nMore content here\n\n\n"
+        c = StructuralMarkdownChunker(max_chars=10000)
+        chunks = c.chunk("d", text)
+        assert chunks, "expected at least one chunk"
+        for ch in chunks:
+            assert text[ch.start:ch.end] == ch.text, (
+                f"offset invariant broken for chunk starting at {ch.start}"
+            )
+
+    def test_trailing_whitespace_before_next_heading(self):
+        from ragcheck.chunkers import StructuralMarkdownChunker
+        # Section 1 has trailing blank lines; section 2 has trailing spaces
+        text = (
+            "# A\n"
+            "body of A\n"
+            "\n"
+            "\n"
+            "# B\n"
+            "body of B   \n"
+            "\n"
+        )
+        c = StructuralMarkdownChunker(max_chars=10000)
+        chunks = c.chunk("d", text)
+        for ch in chunks:
+            assert text[ch.start:ch.end] == ch.text
+
+    def test_long_section_with_rstrip_preserves_invariant(self):
+        # A section long enough to trigger the inner semantic-boundary split,
+        # with trailing whitespace on the section. Must still round-trip.
+        from ragcheck.chunkers import StructuralMarkdownChunker
+        body = "This is a sentence. " * 40  # ~800 chars
+        text = f"# Long\n{body}\n\n\n\n# Next\nshort body\n"
+        c = StructuralMarkdownChunker(max_chars=200)
+        chunks = c.chunk("d", text)
+        assert chunks
+        for ch in chunks:
+            assert text[ch.start:ch.end] == ch.text
+
+    def test_no_headings_fallback_preserves_invariant(self):
+        from ragcheck.chunkers import StructuralMarkdownChunker
+        text = "No headings here.\n\nJust paragraphs.\n\n\n"
+        c = StructuralMarkdownChunker(max_chars=10000)
+        chunks = c.chunk("d", text)
+        for ch in chunks:
+            assert text[ch.start:ch.end] == ch.text

@@ -422,7 +422,17 @@ class StructuralMarkdownChunker:
             section_start = h.start()
             section_end = headings[i + 1].start() if i + 1 < len(headings) else len(text)
             heading_text = h.group(2).strip()[:60]
-            section_text = text[section_start:section_end].rstrip()
+            # Preserve the chunk offset invariant: ``text[chunk.start:chunk.end]``
+            # must equal ``chunk.text``. Earlier code did
+            # ``text[section_start:section_end].rstrip()`` which stripped
+            # trailing whitespace without shrinking ``section_end``, so
+            # slicing back no longer matched the stored text (Cycle E H2).
+            # Now we shrink ``section_end`` to the last non-whitespace
+            # character instead, keeping the invariant intact. This also
+            # mirrors Cycle B's H1 fix for ``SemanticBoundaryChunker``.
+            rstripped = text[section_start:section_end].rstrip()
+            section_end = section_start + len(rstripped)
+            section_text = rstripped
             if len(section_text) <= self.max_chars:
                 cid = _make_chunk_id(doc_id, section_start, section_end, "md")
                 out.append(

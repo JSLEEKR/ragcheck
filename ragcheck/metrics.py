@@ -117,6 +117,15 @@ def dcg_at_k(gains: Sequence[float], k: int) -> float:
     limit = min(k, len(gains))
     for i in range(limit):
         gain = gains[i]
+        # Reject non-finite gains explicitly: ``gain < 0`` is False for NaN,
+        # so a bare ``gain < 0`` check let NaN and +Inf slip through and
+        # produced a NaN DCG downstream — which aggregates into a NaN
+        # summary and either crashes later or silently propagates to the
+        # run JSON. Cycle E H3.
+        if isinstance(gain, float) and (math.isnan(gain) or math.isinf(gain)):
+            raise ValueError(
+                f"DCG gain must be finite, got {gain} at position {i}"
+            )
         if gain < 0:
             raise ValueError(f"DCG gain must be >= 0, got {gain} at position {i}")
         numerator = (2.0 ** gain) - 1.0
@@ -147,6 +156,15 @@ def ndcg_at_k(
     for rid, rv in relevance.items():
         if not isinstance(rid, str):
             raise TypeError(f"relevance keys must be str, got {type(rid).__name__}: {rid!r}")
+        # ``rv < 0`` is False for NaN/+Inf, so relax it into an explicit
+        # finite check first. Without this, a gold file containing NaN
+        # (which Python's json parser happily decodes as an extension)
+        # produced a NaN nDCG value that silently made every run look
+        # broken. Cycle E H3.
+        if isinstance(rv, float) and (math.isnan(rv) or math.isinf(rv)):
+            raise ValueError(
+                f"relevance values must be finite, got {rv} for id {rid!r}"
+            )
         if rv < 0:
             raise ValueError(f"relevance values must be >= 0, got {rv} for id {rid!r}")
     k_eff = _clip_k(retrieved, k) if k > 0 else 0

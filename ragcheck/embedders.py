@@ -138,11 +138,36 @@ class OpenAIEmbedder:
 
     def _load_cached(self, text: str) -> Optional[np.ndarray]:
         p = self._cache_path(text)
-        if p.exists():
+        if not p.exists():
+            return None
+        # The on-disk cache can become corrupt if the process was killed
+        # mid-write, the disk filled up, or a stray editor re-saved the
+        # file in a wrong encoding. Treat ANY decode failure, schema
+        # mismatch, or shape mismatch as a cache MISS (not a crash) and
+        # silently delete the bad entry so the next call writes a fresh
+        # one. A confusing ``JSONDecodeError`` from deep inside embed()
+        # used to make users think their API key or network was broken
+        # when really they just had a half-written cache file (Cycle E H1).
+        try:
             with p.open("r", encoding="utf-8") as f:
                 data = json.load(f)
-            return np.asarray(data["vector"], dtype=np.float64)
-        return None
+            if not isinstance(data, dict) or "vector" not in data:
+                raise ValueError("cache entry missing 'vector' key")
+            vec = np.asarray(data["vector"], dtype=np.float64)
+            if vec.ndim != 1 or vec.shape[0] != self.dim:
+                raise ValueError(
+                    f"cache entry has shape {vec.shape}, expected ({self.dim},)"
+                )
+            return vec
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            # Remove the corrupt entry so subsequent runs don't keep hitting
+            # it; on the next embed() call the API will be re-queried and
+            # the fresh result saved.
+            try:
+                p.unlink()
+            except OSError:
+                pass
+            return None
 
     def _save_cached(self, text: str, vec: np.ndarray) -> None:
         p = self._cache_path(text)

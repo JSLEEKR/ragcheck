@@ -250,3 +250,70 @@ class TestLazyEmbedders:
 
     def test_sentence_transformers_embedder_name(self):
         assert SentenceTransformersEmbedder().name == "sentence-transformers"
+
+
+class TestOpenAICacheFaultInjectionCycleE:
+    """Corrupt on-disk cache entries must be treated as MISS, not a crash.
+
+    Cycle E H1: before the fix, a half-written cache file (process killed
+    mid-save, disk filled, stray editor re-saving in cp1252 instead of
+    utf-8) raised ``JSONDecodeError``/``KeyError``/``ValueError`` from
+    deep inside ``embed()``, leaving the user staring at a confusing
+    traceback that blamed their network or API key rather than the
+    actual fault: a corrupt local file. The fix treats any such fault as
+    a cache miss and deletes the bad entry.
+    """
+
+    def test_corrupt_json_returns_none_and_removes_entry(self, tmp_path):
+        e = OpenAIEmbedder(cache_dir=tmp_path)
+        p = e._cache_path("hello")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("NOT VALID JSON {{{")
+        assert e._load_cached("hello") is None
+        # Corrupt entry should be cleaned up so next embed() re-queries
+        # the API rather than hitting the same fault twice.
+        assert not p.exists()
+
+    def test_truncated_json_returns_none(self, tmp_path):
+        e = OpenAIEmbedder(cache_dir=tmp_path)
+        p = e._cache_path("t")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text('{"model": "m", "vector":')
+        assert e._load_cached("t") is None
+
+    def test_empty_file_returns_none(self, tmp_path):
+        e = OpenAIEmbedder(cache_dir=tmp_path)
+        p = e._cache_path("t")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("")
+        assert e._load_cached("t") is None
+
+    def test_missing_vector_key_returns_none(self, tmp_path):
+        e = OpenAIEmbedder(cache_dir=tmp_path)
+        p = e._cache_path("t")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text('{"model": "m"}')
+        assert e._load_cached("t") is None
+
+    def test_wrong_dim_returns_none(self, tmp_path):
+        # A vector with the wrong dimension is treated as corrupt (user might
+        # have mixed cache directories between two different models).
+        e = OpenAIEmbedder(cache_dir=tmp_path)
+        p = e._cache_path("t")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text('{"model": "m", "vector": [0.1, 0.2, 0.3]}')
+        assert e._load_cached("t") is None
+
+    def test_valid_entry_still_loads(self, tmp_path):
+        # Regression guard: don't over-correct and break the happy path.
+        e = OpenAIEmbedder(cache_dir=tmp_path)
+        import json as _j
+        p = e._cache_path("ok")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        vec = [0.0] * e.dim
+        vec[0] = 1.0
+        p.write_text(_j.dumps({"model": e.model, "vector": vec}))
+        out = e._load_cached("ok")
+        assert out is not None
+        assert out.shape == (e.dim,)
+        assert out[0] == 1.0

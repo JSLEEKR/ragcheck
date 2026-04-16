@@ -22,6 +22,7 @@ is sorted so two runs over the same corpus are byte-identical.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterator, List
@@ -167,6 +168,17 @@ def load_gold_set(path: Path) -> GoldSet:
                     fv = float(v)
                 except (TypeError, ValueError) as e:
                     raise ValueError(f"relevance value must be numeric: {v!r}") from e
+                # Python's json parser accepts ``NaN`` / ``Infinity`` /
+                # ``-Infinity`` as an extension of the spec. Reject them
+                # explicitly so a gold file containing ``"relevance": {"a":
+                # NaN}`` is flagged at load time — otherwise the NaN
+                # silently propagates into the relevance dict, breaks
+                # nDCG, and makes every run look catastrophically wrong.
+                # Cycle E M1.
+                if math.isnan(fv) or math.isinf(fv):
+                    raise ValueError(
+                        f"relevance value must be finite, got {v!r} for id {k!r}"
+                    )
                 if fv < 0:
                     raise ValueError(f"relevance value must be >= 0: {v!r}")
                 relevance[k] = fv
@@ -185,12 +197,23 @@ def load_gold_set(path: Path) -> GoldSet:
 
 
 def save_gold_set(gold: GoldSet, path: Path) -> None:
-    """Write a gold set to JSON deterministically (sorted keys, utf-8)."""
+    """Write a gold set to JSON deterministically (sorted keys, utf-8).
+
+    The ``source`` field is normalised to forward-slash separators so a
+    gold set produced on Windows is byte-identical to one produced on
+    POSIX — otherwise ``ragcheck synth`` on Windows writes literal
+    ``"C:\\\\Users\\\\..."`` into the gold JSON, breaking cross-platform
+    determinism (Cycle E M2 — matches Cycle D M3's fix for RunConfig).
+    """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
+    data = gold.to_dict()
+    src = data.get("source")
+    if isinstance(src, str):
+        data["source"] = src.replace("\\", "/")
     with p.open("w", encoding="utf-8") as f:
         json.dump(
-            gold.to_dict(),
+            data,
             f,
             sort_keys=True,
             ensure_ascii=False,

@@ -265,3 +265,96 @@ class TestFloatBoundary:
         diff = diff_runs(base, head)
         assert diff.exit_code == 1
         assert "recall@5" in diff.degraded
+
+
+class TestDiffRunsTopKCapWarningCycleE:
+    """Cycle E M2: diff_runs must warn when baseline/head were run with
+    different top_k_cap or k_values. Silent comparison of metrics computed
+    over different retrieval windows is misleading.
+    """
+
+    def _cfg_payload(self, summary: dict, cfg: dict) -> dict:
+        return {
+            "config": cfg,
+            "summary": dict(summary),
+            "corpus_stats": {"corpus_sha1": "abc"},
+        }
+
+    def test_different_top_k_cap_emits_warning(self):
+        base = self._cfg_payload(
+            {"recall@10": 0.5},
+            {"label": "base", "top_k_cap": 5, "k_values": [1, 5, 10]},
+        )
+        head = self._cfg_payload(
+            {"recall@10": 0.6},
+            {"label": "head", "top_k_cap": 10, "k_values": [1, 5, 10]},
+        )
+        diff = diff_runs(base, head)
+        assert diff.warnings, "expected a warning when top_k_cap differs"
+        assert any("top_k_cap" in w for w in diff.warnings)
+        assert any("5" in w and "10" in w for w in diff.warnings)
+
+    def test_same_top_k_cap_no_warning(self):
+        base = self._cfg_payload(
+            {"recall@5": 0.5}, {"label": "base", "top_k_cap": 10}
+        )
+        head = self._cfg_payload(
+            {"recall@5": 0.6}, {"label": "head", "top_k_cap": 10}
+        )
+        diff = diff_runs(base, head)
+        assert diff.warnings == []
+
+    def test_different_k_values_emits_warning(self):
+        base = self._cfg_payload(
+            {"recall@5": 0.5},
+            {"label": "base", "top_k_cap": 10, "k_values": [1, 5]},
+        )
+        head = self._cfg_payload(
+            {"recall@5": 0.6},
+            {"label": "head", "top_k_cap": 10, "k_values": [1, 5, 10]},
+        )
+        diff = diff_runs(base, head)
+        assert any("k_values" in w for w in diff.warnings)
+
+    def test_warnings_appear_in_json_output(self, tmp_path: Path):
+        base = self._cfg_payload(
+            {"recall@10": 0.5},
+            {"label": "base", "top_k_cap": 5},
+        )
+        head = self._cfg_payload(
+            {"recall@10": 0.6},
+            {"label": "head", "top_k_cap": 10},
+        )
+        diff = diff_runs(base, head)
+        p = tmp_path / "diff.json"
+        dump_diff_json(diff, p)
+        data = json.loads(p.read_text(encoding="utf-8"))
+        assert "warnings" in data
+        assert data["warnings"], "warnings should be serialised in JSON"
+
+    def test_warnings_appear_in_markdown_output(self):
+        base = self._cfg_payload(
+            {"recall@10": 0.5},
+            {"label": "base", "top_k_cap": 5},
+        )
+        head = self._cfg_payload(
+            {"recall@10": 0.6},
+            {"label": "head", "top_k_cap": 10},
+        )
+        diff = diff_runs(base, head)
+        md = render_diff_markdown(diff)
+        assert "## Warnings" in md
+        assert "top_k_cap" in md
+
+    def test_warnings_do_not_change_exit_code_when_no_degradation(self):
+        base = self._cfg_payload(
+            {"recall@10": 0.5},
+            {"label": "base", "top_k_cap": 5},
+        )
+        head = self._cfg_payload(
+            {"recall@10": 0.6},
+            {"label": "head", "top_k_cap": 10},
+        )
+        diff = diff_runs(base, head)
+        assert diff.warnings
+        assert diff.exit_code == 0  # still improved, warning is advisory
